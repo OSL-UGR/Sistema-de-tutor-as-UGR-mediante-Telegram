@@ -1,0 +1,90 @@
+2025-05-13 18:30:40,234 [INFO] TOKEN DE VERIFICACIÓN para alb172@correo.ugr.es: 157853
+2025-05-13 18:37:15,463 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 777722
+2025-05-13 19:04:00,095 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 468760
+2025-05-13 19:04:27,360 [ERROR] Error al registrar usuario desde Excel: 6437090930
+2025-05-13 20:05:59,167 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 354367
+2025-05-13 20:06:14,679 [ERROR] Error al registrar usuario desde Excel: no such table: Carreras
+2025-05-14 10:38:54,185 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 549736
+2025-05-14 10:54:03,562 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 848984
+2025-05-14 10:59:49,104 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 372550
+2025-05-14 11:02:41,003 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 742090
+2025-05-14 12:25:01,880 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 515987
+2025-05-14 12:54:40,363 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 245653
+2025-05-14 13:07:45,384 [INFO] TOKEN DE VERIFICACIÓN enviado a lb1722@correo.ugr.es: 689426
+2025-05-14 13:08:09,098 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 355299
+2025-05-15 11:17:19,306 [INFO] TOKEN DE VERIFICACIÓN enviado a alb1722@correo.ugr.es: 676916
+2025-05-15 11:17:57,308 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 250050
+2025-05-15 13:12:20,370 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 367734
+2025-05-15 13:38:19,774 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 554343
+2025-05-15 17:54:42,705 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 957426
+2025-05-15 17:58:27,787 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 191293
+2025-05-15 17:58:32,921 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-05-15 19:38:20,646 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 645133
+2025-05-15 19:38:25,463 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-05-15 19:52:15,027 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 102827
+2025-05-15 19:52:19,680 [ERROR] No se encontró el email alb172@correo.ugr.es en la base de datos
+2025-05-15 20:02:59,615 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 165260
+2025-05-15 20:03:06,108 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-05-16 10:24:18,007 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 626488
+2025-05-16 10:24:26,512 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-05-16 10:42:32,444 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 965747
+2025-05-16 10:42:38,135 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-05-16 11:20:18,586 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 796284
+2025-05-16 11:20:25,079 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-05-16 23:08:28,494 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 480283
+2025-05-16 23:08:32,968 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-05-23 08:24:22,516 [ERROR] Error en el envío del correo a gmaciafake@ugr.es: {'gmaciafake@ugr.es': (550, b'5.1.1 <gmaciafake@ugr.es>: Recipient address rejected: User unknown in local recipient table')}
+2025-05-23 08:25:53,431 [ERROR] Error en el envío del correo a xxx@ugr.es: {'xxx@ugr.es': (550, b'5.1.1 <xxx@ugr.es>: Recipient address rejected: User unknown in local recipient table')}
+2025-05-23 08:27:09,106 [INFO] TOKEN DE VERIFICACIÓN enviado a gmacia@ugr.es: 281288
+2025-05-23 08:27:44,463 [INFO] Usuario gmacia@ugr.es verificado correctamente. TelegramID actualizado.
+2025-05-23 08:28:38,722 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 842627
+2025-05-23 08:28:44,055 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-05-23 11:23:41,396 [INFO] TOKEN DE VERIFICACIÓN enviado a albfake@correo.ugr.es: 198689
+2025-05-23 11:36:43,873 [INFO] TOKEN DE VERIFICACIÓN enviado a alfaeke@correo.ugr.es: 518950
+2025-05-23 11:41:20,639 [INFO] TOKEN DE VERIFICACIÓN enviado a alfake@correo.ugr.es: 982135
+2025-05-23 12:09:02,111 [INFO] TOKEN DE VERIFICACIÓN enviado a faek@correo.ugr.es: 710753
+2025-05-23 12:42:22,540 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 968238
+2025-05-23 12:42:27,036 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-05-23 18:11:58,739 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 539020
+2025-05-23 18:12:04,633 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-05-23 18:20:28,163 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 609474
+2025-05-23 18:20:33,505 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-05-31 19:15:43,281 [INFO] TOKEN DE VERIFICACIÓN enviado a joseravelgar@gmail.com: 411577
+2025-05-31 19:15:55,257 [INFO] Usuario joseravelgar@gmail.com verificado correctamente. TelegramID actualizado.
+2025-05-31 19:15:55,337 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)
+2025-06-01 12:52:40,194 [INFO] TOKEN DE VERIFICACIÓN enviado a velascofuentesclara@gmail.com: 774546
+2025-06-01 12:52:56,134 [INFO] Usuario velascofuentesclara@gmail.com verificado correctamente. TelegramID actualizado.
+2025-06-01 12:52:56,219 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)
+2025-06-04 19:46:36,323 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 968088
+2025-06-04 19:46:44,235 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-06-04 19:46:44,289 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)
+2025-06-04 19:48:37,162 [INFO] TOKEN DE VERIFICACIÓN enviado a velascofuentesclara@gmail.com: 732693
+2025-06-04 19:48:56,521 [INFO] Usuario velascofuentesclara@gmail.com verificado correctamente. TelegramID actualizado.
+2025-06-04 19:48:56,521 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)
+2025-06-05 14:23:27,595 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 818492
+2025-06-05 14:23:33,436 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-06-05 14:23:33,492 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)
+2025-06-05 17:18:16,439 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 203340
+2025-06-05 17:18:24,950 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-06-05 17:18:25,036 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)
+2025-06-05 19:59:49,665 [INFO] TOKEN DE VERIFICACIÓN enviado a velascofuentesclara@gmail.com: 870980
+2025-06-05 20:00:02,463 [INFO] Usuario velascofuentesclara@gmail.com verificado correctamente. TelegramID actualizado.
+2025-06-05 20:00:02,496 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)
+2025-06-06 12:53:18,471 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 857030
+2025-06-06 12:53:24,557 [INFO] TOKEN DE VERIFICACIÓN enviado a velascofuentesclara@gmail.com: 764539
+2025-06-06 12:53:39,403 [INFO] Usuario velascofuentesclara@gmail.com verificado correctamente. TelegramID actualizado.
+2025-06-06 12:53:39,464 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)
+2025-06-06 12:53:42,382 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-06-06 12:53:42,383 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)
+2025-06-10 17:37:38,542 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 323966
+2025-06-10 17:37:44,886 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-06-10 17:37:45,017 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)
+2025-06-10 17:38:51,601 [INFO] TOKEN DE VERIFICACIÓN enviado a gmacia@ugr.es: 791197
+2025-06-10 17:39:10,544 [INFO] Usuario gmacia@ugr.es verificado correctamente. TelegramID actualizado.
+2025-06-10 17:39:10,544 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)
+2025-06-10 18:03:52,841 [INFO] TOKEN DE VERIFICACIÓN enviado a alb172@correo.ugr.es: 426378
+2025-06-10 18:04:03,349 [INFO] Usuario alb172@correo.ugr.es verificado correctamente. TelegramID actualizado.
+2025-06-10 18:04:03,412 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)
+2025-06-10 18:04:33,327 [INFO] TOKEN DE VERIFICACIÓN enviado a joseravelgar@gmail.com: 839856
+2025-06-10 18:04:48,251 [INFO] Usuario joseravelgar@gmail.com verificado correctamente. TelegramID actualizado.
+2025-06-10 18:04:48,252 [ERROR] Error al enviar mensaje de bienvenida: cannot import name 'enviar_mensaje_bienvenida' from 'main' (c:\Users\Alberto\Desktop\TFG_V2\main.py)

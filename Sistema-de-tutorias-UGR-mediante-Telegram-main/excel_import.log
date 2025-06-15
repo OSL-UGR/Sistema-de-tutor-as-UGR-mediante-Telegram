@@ -1,0 +1,42 @@
+2025-05-13 17:40:21,186 [ERROR] Archivo Excel no encontrado: c:\Users\Alberto\Desktop\TFG_V2\data\usuarios.xlsx
+2025-05-13 17:40:21,732 [ERROR] Archivo Excel no encontrado: c:\Users\Alberto\Desktop\TFG_V2\data\usuarios.xlsx
+2025-05-13 17:48:33,132 [ERROR] Faltan columnas obligatorias: Nombre, Apellidos, DNI, Email, Tipo, Area, Carrera, Asignaturas
+2025-05-13 18:19:26,079 [ERROR] Faltan columnas obligatorias: Nombre, Apellidos, DNI, Email, Tipo, Area, Carrera, Asignaturas
+2025-05-13 18:19:26,087 [ERROR] Faltan columnas obligatorias: Nombre, Apellidos, DNI, Email, Tipo, Area, Carrera, Asignaturas
+2025-05-13 18:24:47,864 [ERROR] Faltan columnas obligatorias: Nombre, Apellidos, DNI, Email, Tipo, Area, Carrera, Asignaturas
+2025-05-13 18:24:47,871 [ERROR] Faltan columnas obligatorias: Nombre, Apellidos, DNI, Email, Tipo, Area, Carrera, Asignaturas
+2025-05-13 18:30:25,268 [ERROR] Faltan columnas obligatorias: Nombre, Apellidos, DNI, Email, Tipo, Area, Carrera, Asignaturas
+2025-05-13 18:30:25,280 [ERROR] Faltan columnas obligatorias: Nombre, Apellidos, DNI, Email, Tipo, Area, Carrera, Asignaturas
+2025-05-13 18:37:00,680 [ERROR] Faltan columnas obligatorias: Nombre, Apellidos, DNI, Email, Tipo, Area, Carrera, Asignaturas
+2025-05-13 18:37:00,688 [ERROR] Faltan columnas obligatorias: Nombre, Apellidos, DNI, Email, Tipo, Area, Carrera, Asignaturas
+2025-05-13 18:39:14,721 [ERROR] Faltan columnas obligatorias: Nombre, Apellidos, DNI, Email, Tipo, Area, Carrera, Asignaturas
+2025-05-13 18:39:14,729 [ERROR] Faltan columnas obligatorias: Nombre, Apellidos, DNI, Email, Tipo, Area, Carrera, Asignaturas
+2025-05-13 19:03:43,532 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 19:03:43,540 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 19:55:36,873 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 19:56:16,085 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 19:58:11,888 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 20:00:04,785 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 20:00:04,791 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 20:02:07,004 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 20:02:07,011 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 20:05:29,290 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 20:05:29,296 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 20:14:43,075 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 20:14:43,081 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 20:23:38,035 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 20:23:38,042 [INFO] Excel cargado correctamente: 1 usuarios encontrados
+2025-05-13 20:27:10,758 [ERROR] Error al cargar Excel: no such table: Usuarios
+2025-05-13 20:27:13,377 [ERROR] Error al cargar Excel: no such table: Usuarios
+2025-05-13 20:27:13,384 [ERROR] Error al cargar Excel: no such table: Usuarios
+2025-05-13 20:38:22,680 [ERROR] Error al cargar Excel: no such table: Usuarios
+2025-05-14 10:18:22,514 [ERROR] Error al cargar Excel: no such table: Carreras
+2025-05-14 10:20:27,656 [ERROR] Error al cargar Excel: no such table: Carreras
+2025-05-14 10:20:27,691 [ERROR] Error al cargar Excel: no such table: Carreras
+2025-05-14 10:20:51,769 [ERROR] Error al cargar Excel: no such table: Carreras
+2025-05-14 10:20:51,778 [ERROR] Error al cargar Excel: no such table: Carreras
+2025-05-14 10:27:15,253 [ERROR] Error al cargar Excel: no such table: Carreras
+2025-05-14 10:27:15,263 [ERROR] Error al cargar Excel: no such table: Carreras
+2025-05-14 10:27:37,346 [ERROR] Error al cargar Excel: no such table: Carreras
+2025-05-14 10:27:37,356 [ERROR] Error al cargar Excel: no such table: Carreras
+2025-05-14 10:29:30,389 [ERROR] Error al cargar Excel: no such table: Carreras

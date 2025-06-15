@@ -1,0 +1,11 @@
+2025-05-17 12:22:03,193 [INFO] Verificación de tablas completada
+2025-05-17 12:24:33,966 [ERROR] Error al guardar grupo: CHECK constraint failed: Tipo_sala IN ('privada', 'pública')
+2025-05-17 12:34:33,687 [INFO] Verificación de tablas completada
+2025-05-17 12:35:25,975 [ERROR] Error al guardar grupo: A request to the Telegram API was unsuccessful. Error code: 400. Description: Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 58
+2025-05-17 12:44:52,977 [INFO] Verificación de tablas completada
+2025-05-17 12:45:39,699 [ERROR] Error al guardar grupo: A request to the Telegram API was unsuccessful. Error code: 400. Description: Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 58
+2025-05-17 13:01:34,695 [INFO] Verificación de tablas completada
+2025-05-17 13:02:25,398 [ERROR] Error al guardar grupo: A request to the Telegram API was unsuccessful. Error code: 400. Description: Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 147
+2025-05-17 13:06:06,112 [INFO] Verificación de tablas completada
+2025-05-23 08:32:51,511 [INFO] Verificación de tablas completada
+2025-05-23 08:47:23,310 [ERROR] Error al guardar grupo: A request to the Telegram API was unsuccessful. Error code: 400. Description: Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 188
