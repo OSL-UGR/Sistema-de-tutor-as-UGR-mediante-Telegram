@@ -946,7 +946,8 @@ def handle_group_creation(message):
         "Por favor, sigue estos pasos:\n\n"
         "1. Entra en la información del grupo\n"
         "2. Selecciona 'Administradores'\n"
-        "3. Añádeme como administrador\n\n"
+        "3. Añádeme como administrador\n"
+        "4. Dame todos los permisos que me falten para ser adminsitrador.\n\n"
         "Una vez me hayas hecho administrador, usa el comando /configurar_grupo."
     )
 

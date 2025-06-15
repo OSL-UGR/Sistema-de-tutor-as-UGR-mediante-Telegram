@@ -182,7 +182,7 @@ def handle_ver_misdatos(message):
                 user_info += f"  📅 Creada: {fecha}\n\n"
         else:
             user_info += "\n*🔵 No has creado salas de tutoría todavía.*\n"
-            user_info += "Usa /crear_grupo_tutoria para crear una nueva sala.\n"
+            user_info += "Usa /crear_ grupo _ tutoria para crear una nueva sala.\n"
     
     # Intentar enviar el mensaje con formato Markdown
     try:
