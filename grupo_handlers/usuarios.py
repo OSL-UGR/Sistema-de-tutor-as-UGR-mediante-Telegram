@@ -3,22 +3,15 @@ Manejadores específicos para la detección de estudiantes nuevos en grupos.
 Este módulo se encarga exclusivamente de dar la bienvenida a estudiantes
 cuando entran a un grupo donde está el bot.
 """
-import telebot
 from telebot import types
-import traceback
 import logging
-import sqlite3
 import os
 import sys
-import time
-from pathlib import Path
+
+from db.queries import get_grupos_tutoria
 
 # Configuración de ruta para importar correctamente
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-# Ahora puedes importar desde db
-from db.queries import get_db_connection, get_user_by_telegram_id
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -78,13 +71,9 @@ def register_student_handlers(bot):
                 # A partir de aquí, código similar al que ya tienes en handle_new_student_in_group
                 # pero adaptado para trabajar con el objeto update de chat_member
                 
-                # Obtener información del grupo
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                
+                # Obtener información del grupo                
                 # Verificar si el grupo es un grupo de tutorías
-                cursor.execute("SELECT * FROM Grupos_tutoria WHERE Chat_id = ?", (str(chat_id),))
-                grupo = cursor.fetchone()
+                grupo = get_grupos_tutoria(Chat_id=str(chat_id))[0]
                 
                 try:
                     print(f"📨 Intentando enviar mensaje de bienvenida para {user.first_name}")
@@ -102,7 +91,6 @@ def register_student_handlers(bot):
                 
                 if not grupo:
                     print(f"ℹ️ Grupo {chat_id} no es una sala de tutoría - No se procesa más")
-                    conn.close()
                     return
                 
                 # Si llegamos aquí, el grupo es una sala de tutoría registrada
@@ -110,7 +98,6 @@ def register_student_handlers(bot):
                 
                 # ...resto de tu código para grupos registrados...
                 
-                conn.close()
                 
         except Exception as e:
             print(f"❌ ERROR PROCESANDO CHAT_MEMBER: {e}")
@@ -141,10 +128,7 @@ def register_student_handlers(bot):
                 print(f"👤 Procesando estudiante: {new_member.first_name} (ID: {user_id})")
                 
                 # Verificar si el grupo es de tutorías
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute("SELECT * FROM Grupos_tutoria WHERE Chat_id = ?", (str(chat_id),))
-                grupo = cursor.fetchone()
+                grupo = get_grupos_tutoria(Chat_id=str(chat_id))[0]
                 
                 # Enviar mensaje de bienvenida siempre
                 try:
@@ -163,13 +147,11 @@ def register_student_handlers(bot):
                 
                 if not grupo:
                     print(f"ℹ️ Grupo {chat_id} no es una sala de tutoría - No se procesa más")
-                    conn.close()
                     continue
                 
                 # Resto de tu lógica para grupos registrados
                 # ...
                 
-                conn.close()
                 
         except Exception as e:
             print(f"❌ ERROR GENERAL EN HANDLER NEW_CHAT_MEMBERS: {e}")

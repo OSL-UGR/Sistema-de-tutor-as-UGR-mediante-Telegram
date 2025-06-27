@@ -5,11 +5,8 @@ Estados, menús y funciones comunes.
 import time
 import logging
 import sys
-import os
 from pathlib import Path
 from telebot import types
-import sqlite3
-import threading
 
 # Configurar paths para importaciones
 root_path = str(Path(__file__).parent.parent.absolute())
@@ -30,11 +27,11 @@ estados_timestamp = state_manager.estados_timestamp
 
 # Importar funciones de la base de datos compartidas
 from db.queries import (
-    get_user_by_telegram_id, 
-    get_db_connection,
-    create_user,
-    crear_grupo_tutoria,
-    añadir_estudiante_grupo
+    get_grupos_tutoria,
+    get_usuarios, 
+    insert_usuario,
+    insert_grupo_tutoria,
+    insert_miembro_grupo
 )
 
 # Constantes
@@ -45,7 +42,7 @@ def configurar_logger():
     logger = logging.getLogger("bot_grupo")
     
     if not logger.handlers:
-        handler = logging.FileHandler("bot_grupos.log")
+        handler = logging.FileHandler("logs/bot_grupos.log")
         formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
         handler.setFormatter(formatter)
         
@@ -102,7 +99,7 @@ def configurar_comandos_por_rol():
 # Funciones de verificación y estado
 def es_profesor(user_id):
     """Verifica si el usuario es un profesor"""
-    user = get_user_by_telegram_id(user_id)
+    user = get_usuarios(TelegramID=user_id)[0]
     if user and user['Tipo'] == 'profesor':
         return True
     return False
@@ -129,78 +126,41 @@ def limpiar_estados_obsoletos():
         logger.info(f"Limpiados {len(usuarios_para_limpiar)} estados obsoletos")
 
 # Funciones de base de datos
-def inicializar_tablas_grupo():
-    """Inicializa las tablas necesarias para grupos"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Crear tabla Usuario_Grupo
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Usuario_Grupo (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            Id_usuario INTEGER,
-            id_sala INTEGER,
-            fecha_union TEXT,
-            FOREIGN KEY (Id_usuario) REFERENCES Usuarios(Id_usuario),
-            FOREIGN KEY (id_sala) REFERENCES Grupos_tutoria(id_sala),
-            UNIQUE(Id_usuario, id_sala)
-        )
-    """)
-    
-    # Verificar columna chat_id en Grupos_tutoria
-    cursor.execute("PRAGMA table_info(Grupos_tutoria)")
-    columnas = [info[1] for info in cursor.fetchall()]
-    if "chat_id" not in columnas:
-        cursor.execute("ALTER TABLE Grupos_tutoria ADD COLUMN chat_id INTEGER")
-        logger.info("Añadida columna 'chat_id' a Grupos_tutoria")
-    
-    conn.commit()
-    conn.close()
-
 def guardar_usuario_en_grupo(user_id, username, chat_id):
     """Guarda un usuario en un grupo específico"""
     try:
         # Verificar si el usuario ya existe
-        user = get_user_by_telegram_id(user_id)
+        user = get_usuarios(TelegramID=user_id)[0]
         
         if not user:
             # Si no existe, crearlo como estudiante usando la función existente
-            user_id_db = create_user(
-                nombre=username, 
-                tipo='estudiante',
-                email=None,
-                telegram_id=user_id
+            user_id_db = insert_usuario(
+                Nombre=username, 
+                Tipo='estudiante',
+                Email_UGR=None,
+                TelegramID=user_id
             )
             logger.info(f"Nuevo usuario {username} (ID: {user_id}) creado")
         else:
             user_id_db = user['Id_usuario']
-        
-        # Asegurar estructura de tabla
-        inicializar_tablas_grupo()
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
+                
         # Buscar grupo por chat_id 
-        cursor.execute("SELECT id_sala FROM Grupos_tutoria WHERE chat_id = ?", (chat_id,))
-        grupo = cursor.fetchone()
-        conn.close()
+        grupo_id = get_grupos_tutoria(Chat_id=str(chat_id))[0]["id_sala"]
         
-        if not grupo:
+        if not grupo_id:
             # Usar función existente para crear grupo
-            grupo_id = crear_grupo_tutoria(
-                profesor_id=1,  # Usar un ID válido
+            grupo_id = insert_grupo_tutoria(
+                id_usuario=1,  # Usar un ID válido
                 nombre_sala=f"Grupo {chat_id}",
                 tipo_sala="publica",
                 chat_id=chat_id,
-                enlace=f"https://t.me/c/{chat_id}"
+                enlace_invitacion=f"https://t.me/c/{chat_id}"
             )
             logger.info(f"Nuevo grupo creado para chat_id {chat_id}")
-        else:
-            grupo_id = grupo[0]
+            
         
         # Usar función existente para añadir al estudiante
-        añadir_estudiante_grupo(grupo_id, user_id_db)
+        insert_miembro_grupo(grupo_id, user_id_db)
         
         logger.info(f"Usuario {username} (ID: {user_id}) asociado al grupo {chat_id}")
         return True
@@ -238,65 +198,3 @@ def send_markdown_message(bot, chat_id, text, reply_markup=None):
             parse_mode=None,
             reply_markup=reply_markup
         )
-
-# Un lock global para sincronizar acceso a la base de datos
-db_lock = threading.RLock()
-
-def execute_db_operation(operation_func, max_retries=5, retry_delay=0.5):
-    """
-    Ejecuta una operación de base de datos con reintentos y manejo de bloqueos.
-    
-    Args:
-        operation_func: Función que recibe una conexión y cursor y realiza operaciones DB
-        max_retries: Número máximo de intentos si hay bloqueo
-        retry_delay: Tiempo de espera entre reintentos
-    
-    Returns:
-        El resultado de operation_func o None si falla
-    """
-    from db.queries import get_db_connection
-    
-    retries = 0
-    while retries < max_retries:
-        conn = None
-        try:
-            # Adquirir lock para evitar competencia
-            with db_lock:
-                conn = get_db_connection()
-                # Configurar timeout más largo para esperar que se libere el bloqueo
-                conn.execute("PRAGMA busy_timeout = 5000")
-                cursor = conn.cursor()
-                
-                # Ejecutar la operación proporcionada
-                result = operation_func(conn, cursor)
-                
-                # Commit si todo salió bien
-                conn.commit()
-                return result
-                
-        except sqlite3.OperationalError as e:
-            if "database is locked" in str(e):
-                retries += 1
-                logging.warning(f"Base de datos bloqueada, reintento {retries}/{max_retries}")
-                time.sleep(retry_delay)
-            else:
-                logging.error(f"Error de base de datos: {e}")
-                import traceback
-                traceback.print_exc()
-                return None
-        except Exception as e:
-            logging.error(f"Error ejecutando operación de BD: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-        finally:
-            # Asegurar que siempre se cierra la conexión
-            if conn:
-                try:
-                    conn.close()
-                except:
-                    pass
-    
-    # Si llegamos aquí, se agotaron los reintentos
-    logging.error("Máximo de reintentos alcanzado para operación de BD")
-    return None

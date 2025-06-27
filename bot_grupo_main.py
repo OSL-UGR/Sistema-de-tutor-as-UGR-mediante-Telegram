@@ -94,14 +94,14 @@ def safe_send_message(chat_id, text, parse_mode=None, **kwargs):
         return bot.send_message(chat_id, text, parse_mode=parse_mode, **kwargs)
 
 # Importar funciones de la base de datos compartidas
-from db.queries import get_db_connection, get_user_by_telegram_id, crear_grupo_tutoria
+from db.queries import get_asignaturas, get_grupos_tutoria, get_matriculas, get_miembros_grupos, get_usuarios, get_usuarios_by_multiple_ids, insert_grupo_tutoria
 
 # Handlers básicos
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    user = get_user_by_telegram_id(user_id)
+    user = get_usuarios(TelegramID=user_id)[0]
     
     if not user:
         bot.send_message(
@@ -114,11 +114,7 @@ def send_welcome(message):
     # Actualizar interfaz según rol y tipo de chat
     if message.chat.type in ['group', 'supergroup']:
         # Estamos en un grupo
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Grupos_tutoria WHERE Chat_id = ?", (str(chat_id),))
-        grupo = cursor.fetchone()
-        conn.close()
+        grupo = get_grupos_tutoria(Chat_id=str(chat_id))[0]
         
         if grupo:
             # Es un grupo de tutoría registrado
@@ -253,61 +249,39 @@ def configurar_grupo(message):
         return
 
     # Verificar si el grupo ya está configurado
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM Grupos_tutoria WHERE Chat_id = ?", (str(chat_id),))
-    grupo = cursor.fetchone()
+    grupo = get_grupos_tutoria(Chat_id=str(chat_id))
 
     if grupo:
+        grupo = grupo[0]
         bot.send_message(chat_id, "ℹ️ Este grupo ya está configurado como sala de tutoría.")
-        conn.close()
         return
 
     # Obtener ID del usuario profesor
-    cursor.execute("SELECT Id_usuario FROM Usuarios WHERE TelegramID = ? AND Tipo = 'profesor'", (str(user_id),))
-    profesor_row = cursor.fetchone()
+    profesor_row = get_usuarios(TelegramID=str(user_id), Tipo='profesor')[0]
 
     if not profesor_row:
         bot.send_message(chat_id, "⚠️ Solo los profesores registrados pueden configurar grupos.")
-        conn.close()
         return
 
     profesor_id = profesor_row['Id_usuario']
 
-    # CONSULTA MEJORADA: Obtener SOLO asignaturas sin sala de avisos asociada
-    cursor.execute("""
-        SELECT a.Id_asignatura, a.Nombre 
-        FROM Asignaturas a 
-        JOIN Matriculas m ON a.Id_asignatura = m.Id_asignatura
-        WHERE m.Id_usuario = ? 
-        AND NOT EXISTS (
-            SELECT 1 
-            FROM Grupos_tutoria g 
-            WHERE g.Id_asignatura = a.Id_asignatura 
-            AND g.Id_usuario = ?
-        )
-    """, (profesor_id, profesor_id))
+    # Obtener SOLO asignaturas sin sala de avisos asociada
 
-    asignaturas_disponibles = cursor.fetchall()
+    asignaturas_profesor = get_matriculas(Id_usuario=profesor_id, Tipo='docente')
+    grupos = get_grupos_tutoria(Id_usuario=profesor_id, Tipo_sala='pública')
+    ids_grupos = [grupo['Id_asignatura'] for grupo in grupos]
+    
+    asignaturas_disponibles = []
+
+    for asignatura in asignaturas_profesor:
+        if asignatura['Id_asignatura'] not in ids_grupos:
+            asignaturas_disponibles.append(asignatura)
 
     # Verificar si ya tiene sala de tutoría privada
-    cursor.execute("""
-        SELECT COUNT(*) as total
-        FROM Grupos_tutoria g
-        WHERE g.Id_usuario = ? AND g.Tipo_sala = 'privada'
-    """, (profesor_id,))
-
-    tiene_privada = cursor.fetchone()['total'] > 0
+    tiene_privada = get_grupos_tutoria(Id_usuario=profesor_id, Tipo_sala='privada') is not None
 
     # Depuración - Mostrar salas actuales
-    cursor.execute("""
-        SELECT g.id_sala, g.Nombre_sala, g.Id_asignatura, a.Nombre as Asignatura
-        FROM Grupos_tutoria g
-        LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-        WHERE g.Id_usuario = ?
-    """, (profesor_id,))
-
-    salas_actuales = cursor.fetchall()
+    salas_actuales = get_grupos_tutoria(Id_usuario=profesor_id)
     print(f"\n--- SALAS ACTUALES PARA PROFESOR ID {profesor_id} ---")
     for sala in salas_actuales:
         # Usar operador ternario para manejar valores nulos
@@ -316,7 +290,6 @@ def configurar_grupo(message):
               f"Asignatura ID: {sala['Id_asignatura']}, Asignatura: {nombre_asignatura}")
     print("--- FIN SALAS ACTUALES ---\n")
 
-    conn.close()
 
     # Verificar si hay asignaturas disponibles
     if not asignaturas_disponibles and not (not tiene_privada):
@@ -392,19 +365,13 @@ def handle_configuracion_asignatura(call):
 
     try:
         # Registrar el grupo en la base de datos
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
         # Obtener nombre de la asignatura
-        cursor.execute("SELECT Nombre FROM Asignaturas WHERE Id_asignatura = ?", (id_asignatura,))
-        asignatura_nombre = cursor.fetchone()[0]
+        asignatura_nombre = get_asignaturas(Id_asignatura=id_asignatura)[0]['Nombre']
 
         # Obtener Id_usuario del profesor a partir de su TelegramID
-        cursor.execute("SELECT Id_usuario FROM Usuarios WHERE TelegramID = ?", (str(user_id),))
-        id_usuario_profesor = cursor.fetchone()[0]
+        id_usuario_profesor = get_usuarios(TelegramID=str(user_id))[0]['Id_usuario']
 
         # Cerrar la conexión temporal
-        conn.close()
 
         # Crear enlace de invitación si es posible
         try:
@@ -425,14 +392,13 @@ def handle_configuracion_asignatura(call):
             logger.warning(f"No se pudo cambiar el nombre del grupo: {e}")
 
         # Crear el grupo en la base de datos
-        from db.queries import crear_grupo_tutoria
-        crear_grupo_tutoria(
-            profesor_id=id_usuario_profesor,
-            nombre_sala=nuevo_nombre,
-            tipo_sala=tipo_sala,  # Ahora con el valor correcto "pública"
-            asignatura_id=id_asignatura,
-            chat_id=str(chat_id),
-            enlace=enlace_invitacion
+        insert_grupo_tutoria(
+            id_usuario_profesor,
+            nuevo_nombre,
+            tipo_sala,  # Ahora con el valor correcto "pública"
+            id_asignatura,
+            str(chat_id),
+            enlace_invitacion
         )
 
         # Mensaje de éxito
@@ -483,18 +449,12 @@ def handle_configuracion_tutoria_privada(call):
     chat_id = user_data[user_id]["chat_id"]
     
     try:
-        # Registrar el grupo en la base de datos
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
+        # Registrar el grupo en la base de datos        
         # Obtener Id_usuario y nombre del profesor a partir de su TelegramID
-        cursor.execute("SELECT Id_usuario, Nombre FROM Usuarios WHERE TelegramID = ?", (str(user_id),))
-        profesor = cursor.fetchone()
-        id_usuario_profesor = profesor[0]
-        nombre_profesor = profesor[1]
+        profesor = get_usuarios(TelegramID=str(user_id))[0]
+        id_usuario_profesor = profesor["Id_usuario"]
+        nombre_profesor = profesor["Nombre"]
 
-        # Cerrar la conexión temporal
-        conn.close()
 
         # Crear enlace de invitación si es posible
         try:
@@ -514,14 +474,13 @@ def handle_configuracion_tutoria_privada(call):
             logger.warning(f"No se pudo cambiar el nombre del grupo: {e}")
         
         # Crear el grupo en la base de datos
-        from db.queries import crear_grupo_tutoria
-        crear_grupo_tutoria(
-            profesor_id=id_usuario_profesor,
-            nombre_sala=nuevo_nombre,
-            tipo_sala=tipo_sala,
-            asignatura_id="0",  # 0 indica que no está vinculado a una asignatura específica
-            chat_id=str(chat_id),
-            enlace=enlace_invitacion
+        insert_grupo_tutoria(
+            id_usuario_profesor,
+            nuevo_nombre,
+            tipo_sala,
+            "0",  # 0 indica que no está vinculado a una asignatura específica
+            str(chat_id),
+            enlace_invitacion
         )
         
         # Mensaje de éxito
@@ -605,14 +564,13 @@ def handle_proposito_sala(call):
             logger.warning(f"No se pudo cambiar el nombre del grupo: {e}")
         
         # Crear el grupo en la base de datos
-        from db.queries import crear_grupo_tutoria
-        crear_grupo_tutoria(
-            profesor_id=id_usuario_profesor,
-            nombre_sala=nuevo_nombre,
-            tipo_sala=tipo_sala,
-            asignatura_id=asignatura_id,
-            chat_id=str(chat_id),
-            enlace=enlace_invitacion
+        insert_grupo_tutoria(
+            id_usuario_profesor,
+            nuevo_nombre,
+            tipo_sala,
+            asignatura_id,
+            str(chat_id),
+            enlace_invitacion
         )
         
         # Mensaje de éxito
@@ -649,7 +607,7 @@ def handle_ver_estudiantes_cmd(message):
     user_id = message.from_user.id
     
     # Verificar que el usuario es profesor
-    user = get_user_by_telegram_id(user_id)
+    user = get_usuarios(TelegramID=user_id)[0]
     if not user or user['Tipo'] != 'profesor':
         bot.send_message(chat_id, "⚠️ Solo los profesores pueden ver la lista de estudiantes")
         return
@@ -657,51 +615,41 @@ def handle_ver_estudiantes_cmd(message):
     # Aquí va el código para mostrar la lista de estudiantes
     # (el mismo que tenías en tu handler de callback)
     try:
-        # Obtener grupo y estudiantes
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
+        # Obtener grupo y estudiantes        
         # Verificar que este chat es un grupo registrado
-        cursor.execute(
-            "SELECT id_sala FROM Grupos_tutoria WHERE Chat_id = ?", 
-            (str(chat_id),)
-        )
-        sala = cursor.fetchone()
+        sala = get_grupos_tutoria(Chat_id=str(chat_id))[0]
         
         if not sala:
             bot.send_message(chat_id, "⚠️ Este grupo no está configurado como sala de tutoría")
-            conn.close()
             return
             
         sala_id = sala['id_sala']
         
-        # Obtener lista de estudiantes
-        cursor.execute("""
-            SELECT u.Nombre, u.Apellidos, u.TelegramID, m.Fecha_incorporacion, m.Estado
-            FROM Miembros_Grupo m
-            JOIN Usuarios u ON m.Id_usuario = u.Id_usuario
-            WHERE m.id_sala = ? AND u.Tipo = 'alumno'
-            ORDER BY m.Fecha_incorporacion DESC
-        """, (sala_id,))
+        # Obtener lista de estudiantes  
+        miembros = get_miembros_grupos(sala_id=sala_id)
+        miembros.sort(key=lambda x: x['Fecha_incorporacion'], reverse=True)
+        ids_estudiantes = [m['Id_usuario'] for m in miembros]
+        estudiantes_miembros = get_usuarios_by_multiple_ids(ids_estudiantes)
+
+        orden = {id_: i for i, id_ in enumerate(ids_estudiantes)}
+        estudiantes_miembros.sort(key=lambda x: orden[x["Id_usuario"]])   #Ordenar como los miembros
+
         
-        estudiantes = cursor.fetchall()
-        conn.close()
-        
-        if not estudiantes:
+        if not estudiantes_miembros:
             bot.send_message(
                 chat_id, 
                 "📊 *No hay estudiantes*\n\nAún no hay estudiantes en este grupo.",
                 parse_mode="Markdown"
             )
             return
-            
+        
         # Crear mensaje con lista de estudiantes
         mensaje = "👨‍🎓 *Lista de estudiantes*\n\n"
         
-        for i, est in enumerate(estudiantes, 1):
+        for i, (mem,est) in enumerate(zip(miembros,estudiantes_miembros), 1):
             nombre_completo = f"{est['Nombre']} {est['Apellidos'] or ''}"
-            fecha = est['Fecha_incorporacion'].split()[0]  # Solo la fecha, no la hora
-            estado = "✅ Activo" if est['Estado'] == 'activo' else "❌ Inactivo"
+            fecha = mem['Fecha_incorporacion'].split()[0]  # Solo la fecha, no la hora
+            estado = "✅ Activo" if mem['Estado'] == 'activo' else "❌ Inactivo"
             
             mensaje += f"{i}. *{nombre_completo}*\n"
             mensaje += f"   • Desde: {fecha}\n"
@@ -727,25 +675,19 @@ def handle_terminar_tutoria(message):
     
     try:
         # Verificar que estamos en una sala de tutoría
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Grupos_tutoria WHERE Chat_id = ?", (str(chat_id),))
-        grupo = cursor.fetchone()
+        grupo = get_grupos_tutoria(Chat_id=str(chat_id))[0]
         
         if not grupo:
             bot.send_message(chat_id, "Esta función solo está disponible en salas de tutoría.")
-            conn.close()
             return
         
         # Verificar el rol del usuario
-        user = get_user_by_telegram_id(user_id)
+        user = get_usuarios(TelegramID=user_id)[0]
         
         if not user:
             bot.send_message(chat_id, "No estás registrado en el sistema.")
-            conn.close()
             return
         
-        conn.close()
         
         # Comportamiento diferente según el rol
         if user['Tipo'] == 'profesor':
@@ -865,7 +807,7 @@ def handle_terminar_estudiante(call):
     
     try:
         # Verificar que es profesor
-        user = get_user_by_telegram_id(user_id)
+        user = get_usuarios(TelegramID=user_id)[0]
         if not user or user['Tipo'] != 'profesor':
             bot.answer_callback_query(call.id, "Solo los profesores pueden usar esta función.")
             return

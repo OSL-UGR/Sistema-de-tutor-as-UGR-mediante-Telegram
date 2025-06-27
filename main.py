@@ -7,11 +7,11 @@ import sys
 from config import TOKEN, DB_PATH,EXCEL_PATH
 
 # Importar funciones para manejar estados
+from db.db import close_connection, commit
 from utils.state_manager import get_state, set_state, clear_state, user_states, user_data
 
 # Importar funciones para manejar el Excel
 from utils.excel_manager import cargar_excel, importar_datos_desde_excel
-from db.queries import get_db_connection
 # Reemplaza todos los handlers universales por este ÚNICO handler al final
 # Inicializar el bot de Telegram
 bot = telebot.TeleBot(TOKEN) 
@@ -26,9 +26,6 @@ def escape_markdown(text):
         text = text.replace(char, '\\' + char)
     
     return text
-
-
-
 
 def setup_commands():
     """Configura los comandos que aparecen en el menú del bot"""
@@ -48,13 +45,13 @@ def setup_commands():
         return False
 
 # Importar funciones básicas de consulta a la BD
-from db.queries import get_user_by_telegram_id
+from db.queries import delete_grupo_tutoria, delete_todos_miembros_grupo, get_grupos_tutoria, get_miembros_grupos, get_usuarios, get_usuarios_by_multiple_ids, update_grupo_tutoria
 
 @bot.message_handler(commands=['help'])
 def handle_help(message):
     """Muestra la ayuda del bot"""
     chat_id = message.chat.id
-    user = get_user_by_telegram_id(message.from_user.id)
+    user = get_usuarios(TelegramID=message.from_user.id)[0]
     
     if not user:
         bot.send_message(
@@ -92,7 +89,7 @@ def handle_ver_misdatos(message):
     chat_id = message.chat.id
     print(f"\n\n### INICIO VER_MISDATOS - Usuario: {message.from_user.id} ###")
     
-    user = get_user_by_telegram_id(message.from_user.id)
+    user = get_usuarios(TelegramID=message.from_user.id)[0]
     
     if not user:
         print("⚠️ Usuario no encontrado en BD")
@@ -105,8 +102,8 @@ def handle_ver_misdatos(message):
     user_dict = dict(user)
     
     # Obtener matrículas del usuario
-    from db.queries import get_matriculas_usuario
-    matriculas = get_matriculas_usuario(user['Id_usuario'])
+    from db.queries import get_matriculas
+    matriculas = get_matriculas(Id_usuario=user['Id_usuario'])
     
     user_info = (
         f"👤 *Datos de usuario:*\n\n"
@@ -139,22 +136,11 @@ def handle_ver_misdatos(message):
         if 'Horario' in user_dict and user_dict['Horario']:
             user_info += f"\n*Horario de tutorías:*\n{user_dict['Horario']}\n\n"
         
-        # NUEVA SECCIÓN: Mostrar salas creadas por el profesor
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Consultar todas las salas creadas por este profesor
-        cursor.execute("""
-            SELECT g.Nombre_sala, g.Proposito_sala, g.Tipo_sala, g.Fecha_creacion, 
-                   g.id_sala, g.Chat_id, a.Nombre as NombreAsignatura
-            FROM Grupos_tutoria g
-            LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-            WHERE g.Id_usuario = ?
-            ORDER BY g.Fecha_creacion DESC
-        """, (user['Id_usuario'],))
-        
-        salas = cursor.fetchall()
-        conn.close()
+        # NUEVA SECCIÓN: Mostrar salas creadas por el profesor        
+        # Consultar todas las salas creadas por este profesor  
+        salas = get_grupos_tutoria(Id_usuario=user['Id_usuario'])
+        print(salas)
+        salas.sort(key=lambda x: x["Fecha_creacion"], reverse=True)
         
         if salas and len(salas) > 0:
             user_info += "\n*🔵 Salas de tutoría creadas:*\n"
@@ -171,7 +157,7 @@ def handle_ver_misdatos(message):
                 proposito = propositos.get(sala['Proposito_sala'], sala['Proposito_sala'] or 'General')
                 
                 # Obtener asignatura o indicar que es general
-                asignatura = sala['NombreAsignatura'] or 'General'
+                asignatura = sala['Asignatura'] or 'General'
                 
                 # Formato de fecha más amigable
                 fecha = sala['Fecha_creacion'].split(' ')[0] if sala['Fecha_creacion'] else 'Desconocida'
@@ -256,7 +242,7 @@ def handle_edit_sala(call):
         print(f"🔍 Sala ID a editar: {sala_id}")
         
         # Verificar que el usuario es el propietario de la sala
-        user = get_user_by_telegram_id(call.from_user.id)
+        user = get_usuarios(TelegramID=call.from_user.id)[0]
         print(f"👤 Usuario: {user['Nombre'] if user else 'No encontrado'}")
         
         if not user or user['Tipo'] != 'profesor':
@@ -265,20 +251,8 @@ def handle_edit_sala(call):
             return
         
         # Obtener datos actuales de la sala
-        conn = get_db_connection()
-        cursor = conn.cursor()
         print(f"🔍 Consultando detalles de sala ID {sala_id}")
-        cursor.execute(
-            """
-            SELECT g.*, a.Nombre as NombreAsignatura
-            FROM Grupos_tutoria g
-            LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-            WHERE g.id_sala = ? AND g.Id_usuario = ?  
-            """, 
-            (sala_id, user['Id_usuario'])
-        )
-        sala = cursor.fetchone()
-        conn.close()
+        sala = get_grupos_tutoria(id_sala=sala_id, Id_usuario=user['Id_usuario'])[0]
         
         if not sala:
             print(f"❌ Sala no encontrada o no pertenece al usuario")
@@ -306,7 +280,7 @@ def handle_edit_sala(call):
         
         # Preparar textos seguros para Markdown
         nombre_sala = escape_markdown(sala['Nombre_sala'])
-        nombre_asignatura = escape_markdown(sala['NombreAsignatura'] or 'General')
+        nombre_asignatura = escape_markdown(sala['Asignatura'] or 'General')
         
         print(f"📤 Enviando mensaje de edición")
         bot.edit_message_text(
@@ -349,34 +323,18 @@ def handle_cambiar_proposito(call):
     nuevo_proposito = data[3]
     
     # Verificar usuario
-    user = get_user_by_telegram_id(call.from_user.id)
+    user = get_usuarios(TelegramID=call.from_user.id)[0]
     if not user or user['Tipo'] != 'profesor':
         bot.answer_callback_query(call.id, "⚠️ No tienes permisos para esta acción")
         return
     
     # Obtener datos de la sala
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT g.*, a.Nombre as NombreAsignatura
-        FROM Grupos_tutoria g
-        LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-        WHERE g.id_sala = ? AND g.Id_usuario = ?  
-        """, 
-        (sala_id, user['Id_usuario'])
-    )
-    sala = cursor.fetchone()
+    sala = get_grupos_tutoria(id_sala=sala_id, Id_usuario=user['Id_usuario'])[0]
     
     # Contar miembros actuales
-    cursor.execute(
-        "SELECT COUNT(*) as total FROM Miembros_Grupo WHERE id_sala = ? AND Estado = 'activo'",  # cambiar chat_id por id_sala
-        (sala_id,)
-    )
-    miembros = cursor.fetchone()
-    conn.close()
+    miembros = len(get_miembros_grupos(id_sala=sala_id, Estado='activo'))
     
-    total_miembros = miembros['total'] if miembros else 0
+    total_miembros = miembros if miembros else 0
     
     # Si no hay miembros, cambiar directamente
     if total_miembros == 0:
@@ -393,7 +351,7 @@ def handle_cambiar_proposito(call):
     
     # Escapar todos los textos dinámicos
     nombre_sala = escape_markdown(sala['Nombre_sala'])
-    nombre_asignatura = escape_markdown(sala['NombreAsignatura'] or 'General')
+    nombre_asignatura = escape_markdown(sala['Asignatura'] or 'General')
     prop_actual = escape_markdown(propositos.get(sala['Proposito_sala'], 'General'))
     prop_nueva = escape_markdown(propositos.get(nuevo_proposito, 'General'))
     
@@ -462,59 +420,44 @@ def handle_confirmar_cambio(call):
     decision_miembros = data[4]  # "mantener" o "eliminar"
     
     # Verificar usuario
-    user = get_user_by_telegram_id(call.from_user.id)
+    user = get_usuarios(TelegramID=call.from_user.id)[0]
     if not user or user['Tipo'] != 'profesor':
         bot.answer_callback_query(call.id, "⚠️ No tienes permisos para esta acción")
         return
     
-    # Realizar el cambio de propósito
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
+    # Realizar el cambio de propósito    
     try:
         # Obtener información de la sala
-        cursor.execute(
-            """
-            SELECT g.*, a.Nombre as NombreAsignatura, u.Nombre as NombreProfesor
-            FROM Grupos_tutoria g
-            LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-            LEFT JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-            WHERE g.id_sala = ?
-            """, 
-            (sala_id,)
-        )
-        sala = cursor.fetchone()
+        sala = get_grupos_tutoria(id_sala=sala_id)[0]
         
         if not sala:
             bot.answer_callback_query(call.id, "❌ Error: No se encontró la sala")
-            conn.close()
             return
         
-        # 1. Actualizar el propósito de la sala
-        cursor.execute(
-            "UPDATE Grupos_tutoria SET Proposito_sala = ? WHERE id_sala = ? AND Id_usuario = ?",
-            (nuevo_proposito, sala_id, user['Id_usuario'])
-        )
-        
-        # 2. Actualizar el tipo de sala según el propósito
+        # Determinar el tipo de sala según el nuevo propósito
         tipo_sala = 'pública' if nuevo_proposito == 'avisos' else 'privada'
-        cursor.execute(
-            "UPDATE Grupos_tutoria SET Tipo_sala = ? WHERE id_sala = ?",
-            (tipo_sala, sala_id)
+
+        update_grupo_tutoria(
+            sala_id,
+            Tipo_sala=tipo_sala,
+            Proposito_sala=nuevo_proposito,
+            Id_usuario=user['Id_usuario'],
+            do_commit=True
         )
         
-        # 3. Generar y actualizar el nuevo nombre según el propósito
+        # Generar nombre según el propósito
         nuevo_nombre = None
         if nuevo_proposito == 'avisos':
-            nuevo_nombre = f"Avisos: {sala['NombreAsignatura']}"
+            nuevo_nombre = f"Avisos: {sala['Asignatura']}"
         elif nuevo_proposito == 'individual':
-            nuevo_nombre = f"Tutoría Privada - Prof. {sala['NombreProfesor']}"
-        
+            nuevo_nombre = f"Tutoría Privada - Prof. {sala['Profesor']}"
+
         # Actualizar el nombre en la BD
         if nuevo_nombre:
-            cursor.execute(
-                "UPDATE Grupos_tutoria SET Nombre_sala = ? WHERE id_sala = ?",
-                (nuevo_nombre, sala_id)
+            update_grupo_tutoria(
+                sala_id,
+                Nombre_sala=nuevo_nombre,
+                do_commit=True
             )
             
             # Intentar cambiar el nombre en Telegram
@@ -543,37 +486,14 @@ def handle_confirmar_cambio(call):
         # 4. Gestionar miembros según la decisión
         if decision_miembros == "eliminar":
             # Eliminar todos los miembros excepto el profesor creador
-            cursor.execute(
-                """
-                DELETE FROM Miembros_Grupo 
-                WHERE id_sala = ? AND Id_usuario != (
-                    SELECT Id_usuario FROM Grupos_tutoria WHERE id_sala = ?
-                )
-                """,
-                (sala_id, sala_id)
-            )
-        
-        conn.commit()
+            delete_todos_miembros_grupo(sala_id)
         
         # Obtener información actualizada de la sala
-        cursor.execute(
-            """
-            SELECT g.*, a.Nombre as NombreAsignatura
-            FROM Grupos_tutoria g
-            LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-            WHERE g.id_sala = ?
-            """, 
-            (sala_id,)
-        )
-        sala = cursor.fetchone()
+        sala = get_grupos_tutoria(id_sala=sala_id)[0]
         
         # Contar miembros restantes
-        cursor.execute(
-            "SELECT COUNT(*) as total FROM Miembros_Grupo WHERE id_sala = ? AND Estado = 'activo'",
-            (sala_id,)
-        )
-        miembros = cursor.fetchone()
-        total_miembros = miembros['total'] if miembros else 0
+        miembros = len(get_miembros_grupos(id_sala=sala_id, Estado='activo'))
+        total_miembros = miembros if miembros else 0
         
         # Textos para los propósitos
         propositos = {
@@ -584,7 +504,7 @@ def handle_confirmar_cambio(call):
         
         # Escapar textos que pueden contener caracteres Markdown
         nombre_sala = escape_markdown(sala['Nombre_sala'])
-        nombre_asignatura = escape_markdown(sala['NombreAsignatura'] or 'General')
+        nombre_asignatura = escape_markdown(sala['Asignatura'] or 'General')
         prop_nueva = escape_markdown(propositos.get(nuevo_proposito, 'General'))
         
         # Mensaje de éxito
@@ -629,8 +549,7 @@ def handle_confirmar_cambio(call):
     except Exception as e:
         print(f"Error al actualizar sala: {e}")
         bot.answer_callback_query(call.id, "❌ Error al actualizar la sala")
-    finally:
-        conn.close()
+
     
     bot.answer_callback_query(call.id)
 
@@ -643,35 +562,22 @@ def handle_ver_miembros(call):
     nuevo_proposito = data[3]
     
     # Verificar usuario
-    user = get_user_by_telegram_id(call.from_user.id)
+    user = get_usuarios(TelegramID=call.from_user.id)[0]
     if not user or user['Tipo'] != 'profesor':
         bot.answer_callback_query(call.id, "⚠️ No tienes permisos para esta acción")
         return
     
-    # Obtener lista de miembros
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute(
-        """
-        SELECT u.Nombre, u.Apellidos, u.Email_UGR, mg.Fecha_union, mg.Estado
-        FROM Miembros_Grupo mg
-        JOIN Usuarios u ON mg.Id_usuario = u.Id_usuario
-        WHERE mg.id_sala = ? AND mg.Estado = 'activo'
-        ORDER BY mg.Fecha_union DESC
-        """,
-        (sala_id,)
-    )
-    
-    miembros = cursor.fetchall()
+    # Obtener lista de miembros    
+    miembros = get_miembros_grupos(id_sala=sala_id, Estado='activo')
+    miembros.sort(key=lambda x: x['Fecha_incorporacion'], reverse=True)
+    ids_miembros = [m['Id_usuario'] for m in miembros]
+    datos_miembros = get_usuarios_by_multiple_ids(ids_miembros)
+
+    orden = {id_: i for i, id_ in enumerate(ids_miembros)}
+    datos_miembros.sort(key=lambda x: orden[x["Id_usuario"]])   #Ordenar como los miembros
     
     # Obtener información de la sala
-    cursor.execute(
-        "SELECT Nombre_sala FROM Grupos_tutoria WHERE id_sala = ?",
-        (sala_id,)
-    )
-    sala = cursor.fetchone()
-    conn.close()
+    sala = get_grupos_tutoria(id_sala=sala_id)[0]["Nombre_sala"]
     
     if not miembros:
         # No hay miembros, cambiar directamente
@@ -682,10 +588,10 @@ def handle_ver_miembros(call):
     # Crear mensaje con lista de miembros
     mensaje = f"👥 *Miembros de la sala \"{sala['Nombre_sala']}\":*\n\n"
     
-    for i, m in enumerate(miembros, 1):
-        nombre_completo = f"{m['Nombre']} {m['Apellidos'] or ''}"
+    for i, (m,d) in enumerate(zip(miembros, datos_miembros), 1):
+        nombre_completo = f"{d['Nombre']} {d['Apellidos'] or ''}"
         fecha = m['Fecha_union'].split(' ')[0] if m['Fecha_union'] else 'Desconocida'
-        mensaje += f"{i}. *{nombre_completo}*\n   📧 {m['Email_UGR']}\n   📅 Unido: {fecha}\n\n"
+        mensaje += f"{i}. *{nombre_completo}*\n   📧 {d['Email_UGR']}\n   📅 Unido: {fecha}\n\n"
     
     # Botones para continuar
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -727,39 +633,21 @@ def handle_cancelar_edicion(call):
     bot.answer_callback_query(call.id)
 
 def notificar_cambio_sala(sala_id, nuevo_proposito):
-    """Notifica a los miembros de la sala sobre el cambio de propósito"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
+    """Notifica a los miembros de la sala sobre el cambio de propósito"""    
     # Obtener datos de la sala
-    cursor.execute(
-        """
-        SELECT g.*, u.Nombre as NombreProfesor, a.Nombre as NombreAsignatura
-        FROM Grupos_tutoria g
-        JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-        LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-        WHERE g.id_sala = ?  
-        """, 
-        (sala_id,)
-    )
-    sala = cursor.fetchone()
+    sala = get_grupos_tutoria(id_sala=sala_id)[0]
     
     if not sala:
-        conn.close()
         return
     
     # Obtener miembros de la sala
-    cursor.execute(
-        """
-        SELECT u.*
-        FROM Miembros_Grupo mg
-        JOIN Usuarios u ON mg.Id_usuario = u.Id_usuario
-        WHERE mg.id_sala = ? AND u.Tipo = 'estudiante' AND mg.Estado = 'activo'  
-        """, 
-        (sala_id,)
-    )
-    miembros = cursor.fetchall()
-    conn.close()
+    miembros = get_miembros_grupos(id_sala=sala_id, Estado='activo')
+    miembros.sort(key=lambda x: x['Fecha_incorporacion'], reverse=True)
+    ids_miembros = [m['Id_usuario'] for m in miembros]
+    miembros_datos = get_usuarios_by_multiple_ids(ids_miembros)
+
+    orden = {id_: i for i, id_ in enumerate(ids_miembros)}
+    miembros_datos.sort(key=lambda x: orden[x["Id_usuario"]])   #Ordenar como los miembros
     
     # Textos para los propósitos (simplificado)
     propositos = {
@@ -780,16 +668,16 @@ def notificar_cambio_sala(sala_id, nuevo_proposito):
     }
     
     # Notificar a cada miembro
-    for miembro in miembros:
+    for miembro in miembros_datos:
         if miembro['TelegramID']:
             try:
                 bot.send_message(
                     miembro['TelegramID'],
                     f"ℹ️ *Cambio en sala de tutoría*\n\n"
-                    f"El profesor *{sala['NombreProfesor']}* ha modificado el propósito "
+                    f"El profesor *{sala['Profesor']}* ha modificado el propósito "
                     f"de la sala *{sala['Nombre_sala']}*.\n\n"
                     f"*Nuevo propósito:* {propositos.get(nuevo_proposito, 'General')}\n"
-                    f"*Asignatura:* {sala['NombreAsignatura'] or 'General'}\n\n"
+                    f"*Asignatura:* {sala['Asignatura'] or 'General'}\n\n"
                     f"{explicaciones.get(nuevo_proposito, '')}\n\n"
                     f"Tu acceso a la sala se mantiene, pero la forma de interactuar "
                     f"podría cambiar según el nuevo propósito.",
@@ -799,22 +687,10 @@ def notificar_cambio_sala(sala_id, nuevo_proposito):
                 print(f"Error al notificar a usuario {miembro['Id_usuario']}: {e}")
 
 def realizar_cambio_proposito(chat_id, message_id, sala_id, nuevo_proposito, user_id):
-    """Realiza el cambio de propósito cuando no hay miembros que gestionar"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
+    """Realiza el cambio de propósito cuando no hay miembros que gestionar"""    
     try:
         # Obtener datos actuales de la sala
-        cursor.execute(
-            """
-            SELECT g.*, a.Nombre as NombreAsignatura
-            FROM Grupos_tutoria g
-            LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-            WHERE g.id_sala = ?
-            """, 
-            (sala_id,)
-        )
-        sala = cursor.fetchone()
+        sala = get_grupos_tutoria(id_sala=sala_id)[0]
         
         if not sala:
             bot.edit_message_text(
@@ -822,36 +698,35 @@ def realizar_cambio_proposito(chat_id, message_id, sala_id, nuevo_proposito, use
                 chat_id=chat_id,
                 message_id=message_id
             )
-            conn.close()
             return
-        
-        # Actualizar propósito
-        cursor.execute(
-            "UPDATE Grupos_tutoria SET Proposito_sala = ? WHERE id_sala = ? AND Id_usuario = ?",
-            (nuevo_proposito, sala_id, user_id)
-        )
         
         # Actualizar tipo
         tipo_sala = 'pública' if nuevo_proposito == 'avisos' else 'privada'
-        cursor.execute(
-            "UPDATE Grupos_tutoria SET Tipo_sala = ? WHERE id_sala = ?",
-            (tipo_sala, sala_id)
+        
+        # Actualizar propósito
+        update_grupo_tutoria(
+            sala_id,
+            Proposito_sala=nuevo_proposito,
+            Id_usuario=user_id,
+            Tipo_sala=tipo_sala,
+            do_commit=True
         )
         
         # Generar nuevo nombre según el propósito
         nuevo_nombre = None
         if nuevo_proposito == 'avisos':
-            nuevo_nombre = f"Avisos: {sala['NombreAsignatura']}"
+            nuevo_nombre = f"Avisos: {sala['Asignatura']}"
         elif nuevo_proposito == 'individual':
             nuevo_nombre = f"Tutoría Privada - Prof. {obtener_nombre_profesor(user_id)}"
         
         # Si se generó un nuevo nombre, actualizar en la base de datos
         if nuevo_nombre:
-            cursor.execute(
-                "UPDATE Grupos_tutoria SET Nombre_sala = ? WHERE id_sala = ?",
-                (nuevo_nombre, sala_id)
+            update_grupo_tutoria(
+                sala_id,
+                Nombre_sala=nuevo_nombre,
+                do_commit=True
             )
-            
+
             # Intentar cambiar el nombre del grupo en Telegram
             telegram_chat_id = sala['Chat_id']
             
@@ -874,20 +749,9 @@ def realizar_cambio_proposito(chat_id, message_id, sala_id, nuevo_proposito, use
                         print(f"❌ No se pudo cambiar el nombre del grupo ni siquiera con el bot de grupos")
                 except Exception as e:
                     print(f"❌ Error al intentar utilizar la función del bot de grupos: {e}")
-        
-        conn.commit()
-        
+                
         # Obtener info actualizada
-        cursor.execute(
-            """
-            SELECT g.*, a.Nombre as NombreAsignatura
-            FROM Grupos_tutoria g
-            LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-            WHERE g.id_sala = ?
-            """, 
-            (sala_id,)
-        )
-        sala_actualizada = cursor.fetchone()
+        sala_actualizada = get_grupos_tutoria(id_sala=sala_id)[0]
         
         # Textos para los propósitos
         propositos = {
@@ -901,7 +765,7 @@ def realizar_cambio_proposito(chat_id, message_id, sala_id, nuevo_proposito, use
             f"✅ *¡Propósito actualizado correctamente!*\n\n"
             f"*Sala:* {sala_actualizada['Nombre_sala']}\n"
             f"*Nuevo propósito:* {propositos.get(nuevo_proposito, 'General')}\n"
-            f"*Asignatura:* {sala_actualizada['NombreAsignatura'] or 'General'}\n\n"
+            f"*Asignatura:* {sala_actualizada['Asignatura'] or 'General'}\n\n"
             f"La sala está lista para su nuevo propósito.",
             chat_id=chat_id,
             message_id=message_id,
@@ -911,16 +775,10 @@ def realizar_cambio_proposito(chat_id, message_id, sala_id, nuevo_proposito, use
     except Exception as e:
         print(f"Error al actualizar sala: {e}")
         bot.send_message(chat_id, "❌ Error al actualizar la sala")
-    finally:
-        conn.close()
 
 def obtener_nombre_profesor(user_id):
     """Obtiene el nombre del profesor a partir del id de usuario"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT Nombre FROM Usuarios WHERE Id_usuario = ?", (user_id,))
-    resultado = cursor.fetchone()
-    conn.close()
+    resultado = get_usuarios(Id_usuario=user_id)[0]
     return resultado['Nombre'] if resultado else "Profesor"
 
 
@@ -936,7 +794,7 @@ def handle_eliminar_sala(call):
         print(f"🔍 Sala ID a eliminar: {sala_id}")
         
         # Verificar que el usuario es el propietario de la sala
-        user = get_user_by_telegram_id(call.from_user.id)
+        user = get_usuarios(TelegramID=call.from_user.id)[0]
         
         if not user or user['Tipo'] != 'profesor':
             print("⚠️ Usuario no es profesor o no existe")
@@ -944,39 +802,22 @@ def handle_eliminar_sala(call):
             return
         
         # Obtener datos de la sala
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT g.*, a.Nombre as NombreAsignatura
-            FROM Grupos_tutoria g
-            LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-            WHERE g.id_sala = ? AND g.Id_usuario = ?  
-            """, 
-            (sala_id, user['Id_usuario'])
-        )
-        sala = cursor.fetchone()
+        sala = get_grupos_tutoria(id_sala=sala_id, Id_usuario=user['Id_usuario'])[0]
         
         if not sala:
             print(f"❌ Sala no encontrada o no pertenece al usuario")
             bot.answer_callback_query(call.id, "❌ No se encontró la sala o no tienes permisos")
-            conn.close()
             return
         
         print(f"✅ Sala encontrada: {sala['Nombre_sala']} (Chat ID: {sala['Chat_id']})")
         
         # Contar miembros actuales
-        cursor.execute(
-            "SELECT COUNT(*) as total FROM Miembros_Grupo WHERE id_sala = ? AND Estado = 'activo'",
-            (sala_id,)
-        )
-        miembros = cursor.fetchone()
-        total_miembros = miembros['total'] if miembros else 0
-        conn.close()
+        miembros = len(get_miembros_grupos(id_sala=sala_id, Estado='activo'))
+        total_miembros = miembros if miembros else 0
         
         # Preparar textos seguros para Markdown
         nombre_sala = escape_markdown(sala['Nombre_sala'])
-        nombre_asignatura = escape_markdown(sala['NombreAsignatura'] or 'General')
+        nombre_asignatura = escape_markdown(sala['Asignatura'] or 'General')
         
         # Confirmar la eliminación con botones
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -1024,7 +865,7 @@ def handle_confirmar_eliminar(call):
         print(f"🔍 Sala ID a eliminar definitivamente: {sala_id}")
         
         # Verificar que el usuario es el propietario de la sala
-        user = get_user_by_telegram_id(call.from_user.id)
+        user = get_usuarios(TelegramID=call.from_user.id)[0]
         
         if not user or user['Tipo'] != 'profesor':
             print("⚠️ Usuario no es profesor o no existe")
@@ -1032,23 +873,11 @@ def handle_confirmar_eliminar(call):
             return
         
         # Obtener datos de la sala
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT g.*, a.Nombre as NombreAsignatura
-            FROM Grupos_tutoria g
-            LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-            WHERE g.id_sala = ? AND g.Id_usuario = ?  
-            """, 
-            (sala_id, user['Id_usuario'])
-        )
-        sala = cursor.fetchone()
+        sala = get_grupos_tutoria(id_sala=sala_id, Id_usuario=user['Id_usuario'])[0]
         
         if not sala:
             print(f"❌ Sala no encontrada o no pertenece al usuario")
             bot.answer_callback_query(call.id, "❌ No se encontró la sala o no tienes permisos")
-            conn.close()
             return
         
         nombre_sala = sala['Nombre_sala']
@@ -1057,23 +886,15 @@ def handle_confirmar_eliminar(call):
         
         # 1. Eliminar todos los miembros de la sala
         print("1️⃣ Eliminando miembros...")
-        cursor.execute(
-            "DELETE FROM Miembros_Grupo WHERE id_sala = ?",
-            (sala_id,)
-        )
+        delete_todos_miembros_grupo(sala_id)
         print(f"  ✓ Miembros eliminados de la BD")
         
         # 2. Eliminar la sala de la base de datos
         print("2️⃣ Eliminando registro de sala...")
-        cursor.execute(
-            "DELETE FROM Grupos_tutoria WHERE id_sala = ? AND Id_usuario = ?",
-            (sala_id, user['Id_usuario'])
-        )
+        delete_grupo_tutoria(sala_id)
         print(f"  ✓ Sala eliminada de la BD")
         
         # Confirmar cambios en la base de datos
-        conn.commit()
-        conn.close()
         print("✅ Cambios en BD confirmados")
         
         # 3. Intentar salir del grupo de Telegram
@@ -1123,7 +944,7 @@ def handle_confirmar_eliminar(call):
 def crear_grupo(message):
     """Proporciona instrucciones para crear un grupo de tutoría en Telegram"""
     chat_id = message.chat.id
-    user = get_user_by_telegram_id(message.from_user.id)
+    user = get_usuarios(TelegramID=message.from_user.id)[0]
     
     # Verificar que el usuario es profesor
     if not user or user['Tipo'] != 'profesor':
@@ -1169,7 +990,7 @@ def crear_grupo(message):
     markup.add(
         types.InlineKeyboardButton(
             "📝 Ver mis salas actuales", 
-            callback_data="ver_misdatos"  # Simplificado
+            callback_data="ver_salas"  # Simplificado
         ),
         types.InlineKeyboardButton(
             "❓ Preguntas frecuentes",
@@ -1418,4 +1239,8 @@ if __name__ == "__main__":
     print("="*50)
     
     # Iniciar el bot
-    setup_polling()
+    try:
+        setup_polling()
+    finally:
+        close_connection()
+        print("🔒 Conexión a la base de datos cerrada")

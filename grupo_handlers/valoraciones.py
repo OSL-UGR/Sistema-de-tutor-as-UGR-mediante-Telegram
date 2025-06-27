@@ -7,7 +7,7 @@ import time
 
 # Añadir directorio padre al path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from db.queries import get_db_connection, get_user_by_telegram_id
+from db.queries import get_matriculas, get_usuarios_by_multiple_ids, insert_valoracion, get_usuarios
 
 
 # Crear estas variables localmente en vez de importarlas
@@ -27,7 +27,7 @@ def register_handlers(bot):
     def handle_valorar_profesor(message):
         """Maneja el comando para valorar a un profesor"""
         chat_id = message.chat.id
-        user = get_user_by_telegram_id(message.from_user.id)
+        user = get_usuarios(TelegramID=message.from_user.id)[0]
         
         if not user:
             bot.send_message(
@@ -43,23 +43,22 @@ def register_handlers(bot):
             )
             return
         
-        # Buscar profesores disponibles para valorar
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
+        # Buscar profesores disponibles para valorar        
         # Obtener profesores de las asignaturas del estudiante
-        cursor.execute("""
-            SELECT DISTINCT u.Id_usuario, u.Nombre
-            FROM Usuarios u
-            JOIN Matriculas mp ON u.Id_usuario = mp.Id_usuario
-            JOIN Asignaturas a ON mp.Id_asignatura = a.Id_asignatura
-            JOIN Matriculas me ON a.Id_asignatura = me.Id_asignatura
-            WHERE u.Tipo = 'profesor' AND me.Id_usuario = ?
-            ORDER BY u.Nombre
-        """, (user['Id_usuario'],))
+        matriculas = get_matriculas(Id_Usuario=user['Id_usuario'])
+        ids_asignaturas = []
+
+        for matricula in matriculas:
+            ids_asignaturas.append(matricula['Id_asignatura'])
+
+        matriculas_profesores = get_matriculas(Tipo="docente")
+        ids_profesores = []
+
+        for matricula in matriculas_profesores:
+            if matricula['Id_asignatura'] in ids_asignaturas:
+                ids_profesores = matricula['Id_usuario']
         
-        profesores = cursor.fetchall()
-        conn.close()
+        profesores = get_usuarios_by_multiple_ids(ids_profesores)
         
         if not profesores:
             bot.send_message(
@@ -92,11 +91,7 @@ def register_handlers(bot):
         profesor_id = int(call.data.split("_")[1])
         
         # Obtener datos del profesor
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Usuarios WHERE Id_usuario = ?", (profesor_id,))
-        profesor = cursor.fetchone()
-        conn.close()
+        profesor = get_usuarios(Id_usuario=profesor_id)[0]
         
         user_data[chat_id] = {"profesor_id": profesor_id, "profesor_nombre": profesor['Nombre']}
         
@@ -196,25 +191,14 @@ def register_handlers(bot):
         user_data[chat_id]["es_anonimo"] = es_anonimo
         
         # Guardar valoración en la base de datos
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
         try:
-            evaluador_id = get_user_by_telegram_id(call.from_user.id)['Id_usuario']
+            evaluador_id = get_usuarios(call.from_user.id)[0]['Id_usuario']
             profesor_id = user_data[chat_id]["profesor_id"]
             puntuacion = user_data[chat_id]["puntuacion"]
             comentario = user_data[chat_id].get("comentario", "")
             fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            cursor.execute(
-                """
-                INSERT INTO Valoraciones 
-                (evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, id_sala) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, user_data[chat_id].get("sala_id"))
-            )
-            conn.commit()
+            insert_valoracion(evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, user_data[chat_id].get("sala_id"))
             
             bot.send_message(
                 chat_id,
@@ -232,7 +216,6 @@ def register_handlers(bot):
             )
         
         finally:
-            conn.close()
             user_states.pop(chat_id, None)
             user_data.pop(chat_id, None)
         
@@ -242,10 +225,7 @@ def register_handlers(bot):
 def iniciar_valoracion_profesor(bot, profesor_id, estudiante_id, sala_id=None):
     """Inicia el proceso de valoración de un profesor desde otro módulo"""
     # Buscar usuario por id
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM Usuarios WHERE Id_usuario = ?", (estudiante_id,))
-    estudiante = cursor.fetchone()
+    estudiante = get_usuarios(Id_usuario=estudiante_id)[0]
     
     # Si no hay TelegramID, no podemos enviar mensaje
     if not estudiante or not estudiante.get('TelegramID'):
@@ -254,8 +234,7 @@ def iniciar_valoracion_profesor(bot, profesor_id, estudiante_id, sala_id=None):
     chat_id = estudiante['TelegramID']
     
     # Obtener datos del profesor
-    cursor.execute("SELECT * FROM Usuarios WHERE Id_usuario = ?", (profesor_id,))
-    profesor = cursor.fetchone()
+    profesor = get_usuarios(Id_usuario=profesor_id)[0]
     
     if not profesor:
         bot.send_message(chat_id, "❌ Profesor no encontrado")

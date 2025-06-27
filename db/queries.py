@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 import os
 import logging
+from db.db import get_cursor, commit, rollback
 
 # Configurar logger
 logger = logging.getLogger(__name__)
@@ -13,55 +14,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Ruta a la base de datos
 DB_PATH = Path(__file__).parent.parent / "tutoria_ugr.db"
 
-def get_db_connection():
-    """Obtiene una conexión a la base de datos"""
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+##=====================
+## ===== Usuarios =====
+##=====================
 
-# ===== FUNCIONES DE USUARIO =====
-def get_user_by_telegram_id(telegram_id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Consulta con JOIN para incluir el horario
-    cursor.execute("""
-        SELECT u.*, hp.dia || ' de ' || hp.hora_inicio || ' a ' || hp.hora_fin AS Horario 
-        FROM Usuarios u 
-        LEFT JOIN Horarios_Profesores hp ON u.Id_usuario = hp.Id_usuario
-        WHERE u.TelegramID = ?
-    """, (telegram_id,))
-    
-    result = cursor.fetchone()
-    conn.close()
-    return result
-
-def get_user_by_id(user_id):
-    """Busca un usuario por su ID en la base de datos"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT * FROM Usuarios WHERE Id_usuario = ?", (user_id,))
-    user = cursor.fetchone()
-    
-    conn.close()
-    return dict(user) if user else None
-
-def buscar_usuario_por_email(email):
-    """Busca un usuario por su email"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT * FROM Usuarios WHERE Email_UGR = ?", (email,))
-    user = cursor.fetchone()
-    
-    conn.close()
-    return dict(user) if user else None
-
-def create_user(nombre, tipo, email, telegram_id=None, apellidos=None, dni=None, carrera=None, Area=None, registrado="NO"):
+def insert_usuario(nombre, tipo, email, telegram_id=None, apellidos=None, dni=None, carrera=None, Area=None, registrado="NO", do_commit=True):
     """Crea un nuevo usuario en la base de datos con los datos proporcionados"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor()
     
     try:
         cursor.execute(
@@ -70,629 +29,611 @@ def create_user(nombre, tipo, email, telegram_id=None, apellidos=None, dni=None,
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (nombre, tipo, email, telegram_id, apellidos, dni, carrera, Area, registrado)
         )
-        conn.commit()
+        if do_commit:
+            commit()
         return cursor.lastrowid
     except Exception as e:
         print(f"Error al crear usuario: {e}")
-        conn.rollback()
+        rollback()
         return None
-    finally:
-        conn.close()
-
-def update_user(user_id, **kwargs):
+    
+def update_usuario(user_id, do_commit = True, **kwargs):
     """Actualiza los datos de un usuario existente"""
-    if not kwargs:
-        return False
-    
+    allowed_fields = {"Nombre", "Apellidos", "DNI", "Tipo", "Email_UGR", "TelegramID", "Registrado", "Area", "Carrera", "Horario"}
+    if not all(k in allowed_fields for k in kwargs):
+        raise ValueError("Campo inválido en la actualización de usuario")
+
     try:
-        # Construir la consulta dinámicamente
         query = "UPDATE Usuarios SET "
-        query += ", ".join([f"{key} = ?" for key in kwargs.keys()])
+        query += ", ".join([f"{k} = ?" for k in kwargs])
         query += " WHERE Id_usuario = ?"
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
+        print(query)
+        print(list(kwargs.values()) + [user_id])
+        cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()) + [user_id])
-        conn.commit()
-        success = cursor.rowcount > 0
-        conn.close()
-        return success
+        print(query)
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
     except Exception as e:
-        import logging
         logging.getLogger('db.queries').error(f"Error al actualizar usuario: {e}")
+        rollback()
         return False
 
-def update_horario_profesor(user_id, horario):
-    """
-    Actualiza el horario de un profesor en la tabla Usuarios
-    
-    Args:
-        user_id: ID del usuario (profesor)
-        horario: Horario en formato string
-        
-    Returns:
-        bool: True si se actualizó correctamente, False en caso contrario
-    """
+def delete_usuario(user_id):
+    cursor = get_cursor()
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Actualizar directamente en la tabla Usuarios
-        cursor.execute(
-            "UPDATE Usuarios SET Horario = ? WHERE Id_usuario = ?",
-            (horario, user_id)
-        )
-        
-        conn.commit()
-        conn.close()
-        return True
+        cursor.execute("DELETE FROM Usuarios WHERE Id_usuario = ?", (user_id,))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar usuario: {e}")
+        rollback()
+
+def get_usuarios(**kwargs):
+    allowed_fields = {
+        "Id_usuario", "Nombre", "Apellidos", "DNI", "Tipo", "Email_UGR",
+        "TelegramID", "Registrado", "Area", "Carrera", "Horario"
+    }
+    try:
+        if not all(k in allowed_fields for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Usuarios")
+
+        query = "SELECT * FROM Usuarios WHERE 1=1"
+        for k in kwargs:
+            query += f" AND {k} = ?"
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return cursor.fetchall()
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al obtener usuario(s): {e}")
+        rollback()
+        return None
+    
+def get_usuarios_by_multiple_ids(usuarios_ids):
+    """Obtiene usuarios a partir de una lista de IDs"""
+    if not usuarios_ids:
+        return []
+
+    cursor = get_cursor()
+
+    try:
+        placeholders = ",".join(["?" for _ in usuarios_ids])
+        query = f"""
+            SELECT * FROM Usuarios
+            WHERE Id_usuario IN ({placeholders})
+            ORDER BY Nombre, Apellidos
+        """
+        cursor.execute(query, usuarios_ids)
+        return [dict(row) for row in cursor.fetchall()]
+
     except Exception as e:
         import logging
-        logger = logging.getLogger('db.queries')
-        logger.error(f"Error al actualizar horario de profesor: {e}")
-        return False
+        logging.getLogger("db.queries").error(f"Error al obtener usuarios por IDs: {e}")
+        return []
 
-# ===== FUNCIONES DE MATRÍCULA =====
-def crear_matricula(user_id, asignatura_id, tipo_usuario=None, curso="Actual"):
-    """
-    Crea o actualiza una matrícula para un usuario en una asignatura
-    
-    Args:
-        user_id: ID del usuario
-        asignatura_id: ID de la asignatura
-        tipo_usuario: Tipo de usuario para esta matrícula (opcional)
-        curso: Curso académico (opcional)
-        
-    Returns:
-        int: ID de la matrícula creada, o None si hubo error
-    """
+
+
+##========================
+## ===== Asignaturas =====
+##========================
+
+def insert_asignatura(nombre, codigo, id_carrera, do_commit=True):
+    cursor = get_cursor()
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Verificar si ya existe la matrícula
         cursor.execute(
-            "SELECT * FROM Matriculas WHERE Id_usuario = ? AND Id_asignatura = ?", 
-            (user_id, asignatura_id)
+            "INSERT INTO Asignaturas (Nombre, Codigo_Asignatura, Id_carrera) VALUES (?, ?, ?)",
+            (nombre, codigo, id_carrera)
         )
-        existe = cursor.fetchone()
-        
-        if not existe:
-            # Si no se proporciona tipo, obtenerlo del usuario
-            if tipo_usuario is None:
-                cursor.execute("SELECT Tipo FROM Usuarios WHERE Id_usuario = ?", (user_id,))
-                user = cursor.fetchone()
-                if user:
-                    tipo_usuario = user[0]
-            
-            # Crear matrícula con el tipo obtenido
-            cursor.execute(
-                "INSERT INTO Matriculas (Id_usuario, Id_asignatura, Tipo, Curso) VALUES (?, ?, ?, ?)",
-                (user_id, asignatura_id, tipo_usuario, curso)
-            )
-            matricula_id = cursor.lastrowid
-            conn.commit()
-        else:
-            # Ya existe, actualizar tipo y curso si se proporcionan
-            matricula_id = existe['id_matricula']
-            updates = {}
-            if tipo_usuario is not None:
-                updates['Tipo'] = tipo_usuario
-            if curso != "Actual":
-                updates['Curso'] = curso
-                
-            if updates:
-                set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
-                values = list(updates.values())
-                values.append(matricula_id)
-                
-                cursor.execute(f"UPDATE Matriculas SET {set_clause} WHERE id_matricula = ?", values)
-                conn.commit()
-                
-        conn.close()
-        return matricula_id
-        
-    except Exception as e:
-        logger.error(f"Error al crear matrícula: {e}")
-        return None
-
-def get_matriculas_by_user(user_id):
-    """Obtiene las matrículas de un usuario con información de asignaturas"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT 
-            m.id_matricula, 
-            m.Id_usuario, 
-            m.Id_asignatura, 
-            m.Curso, 
-            a.Nombre as Asignatura,
-            u.Carrera as Carrera
-        FROM 
-            Matriculas m
-        JOIN 
-            Asignaturas a ON m.Id_asignatura = a.Id_asignatura
-        JOIN
-            Usuarios u ON m.Id_usuario = u.Id_usuario
-        WHERE 
-            m.Id_usuario = ?
-    """, (user_id,))
-    
-    matriculas = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    
-    return matriculas
-
-def verificar_estudiante_matriculado(estudiante_id, asignatura_id):
-    """Verifica si un estudiante está matriculado en una asignatura"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT COUNT(*) as count 
-        FROM Matriculas
-        WHERE Id_usuario = ? AND Id_asignatura = ?
-    """, (estudiante_id, asignatura_id))
-    
-    result = cursor.fetchone()
-    conn.close()
-    
-    return result['count'] > 0
-
-def get_matriculas_usuario(user_id):
-    """Obtiene las matrículas de un usuario incluyendo nombres de asignatura"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute("""
-            SELECT m.*, a.Nombre as Asignatura 
-            FROM Matriculas m
-            JOIN Asignaturas a ON m.Id_asignatura = a.Id_asignatura
-            WHERE m.Id_usuario = ?
-        """, (user_id,))
-        
-        # Convertir filas a diccionarios para facilitar su uso
-        result = [dict(row) for row in cursor.fetchall()]
-        return result
-    except Exception as e:
-        print(f"Error al obtener matrículas: {e}")
-        return []
-    finally:
-        conn.close()
-
-# ===== FUNCIONES DE GRUPOS =====
-def crear_grupo_tutoria(profesor_id, nombre_sala, tipo_sala, asignatura_id, chat_id, enlace=None, proposito=None):
-    """Crea un nuevo grupo de tutoría en la base de datos"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute('''
-            INSERT INTO Grupos_tutoria 
-            (Id_usuario, Nombre_sala, Tipo_sala, Id_asignatura, Chat_id, Enlace_invitacion, Proposito_sala) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (profesor_id, nombre_sala, tipo_sala, asignatura_id, str(chat_id), enlace, proposito))
-        
-        conn.commit()
-        grupo_id = cursor.lastrowid
-        return grupo_id
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
-
-def crear_grupo_tutoria_directo(conn, profesor_id, nombre_sala, tipo_sala, asignatura_id, chat_id, enlace=None):
-    """
-    Versión adaptada de crear_grupo_tutoria que utiliza una conexión existente
-    y es compatible con la estructura actual de la base de datos
-    """
-    try:
-        cursor = conn.cursor()
-        
-        # Primera inserción - Grupo (usando el nombre correcto de la columna: Enlace_invitacion)
-        cursor.execute("""
-            INSERT INTO Grupos_tutoria 
-            (Id_usuario, Nombre_sala, Tipo_sala, Id_asignatura, Chat_id, Proposito_sala, Enlace_invitacion)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (profesor_id, nombre_sala, tipo_sala, asignatura_id, chat_id, 
-              'avisos' if tipo_sala == 'pública' else 'individual', enlace))
-        
-        # Obtener el ID generado del grupo
-        grupo_id = cursor.lastrowid
-        
-        # Añadir al profesor como miembro del grupo (en lugar de usar Administradores_Grupo)
-        cursor.execute("""
-            INSERT INTO Miembros_Grupo (id_sala, Id_usuario, Estado)
-            VALUES (?, ?, 'activo')
-        """, (grupo_id, profesor_id))
-        
-        return grupo_id
-    except Exception as e:
-        print(f"Error en crear_grupo_tutoria_directo: {e}")
-        conn.rollback()
-        return None
-
-def actualizar_grupo_tutoria(grupo_id, **kwargs):
-    """
-    Actualiza la información de un grupo de tutoría
-    
-    Args:
-        grupo_id: ID del grupo a actualizar
-        **kwargs: Campos a actualizar (Chat_id, Enlace_invitacion, etc.)
-        
-    Returns:
-        bool: True si se actualizó correctamente
-    """
-    if not kwargs:
-        return False
-        
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Construir consulta dinámica
-        set_clause = ", ".join([f"{key} = ?" for key in kwargs.keys()])
-        values = list(kwargs.values())
-        values.append(grupo_id)
-        
-        cursor.execute(f"UPDATE Grupos_tutoria SET {set_clause} WHERE id_sala = ?", values)
-        
-        success = cursor.rowcount > 0
-        conn.commit()
-        return success
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Error al actualizar grupo de tutoría: {e}")
-        return False
-    finally:
-        conn.close()
-
-def obtener_grupos(profesor_id=None, asignatura_id=None):
-    """
-    Obtiene grupos de tutoría aplicando filtros opcionales
-    
-    Args:
-        profesor_id: ID del profesor (opcional)
-        asignatura_id: ID de la asignatura (opcional)
-        
-    Returns:
-        list: Lista de grupos que cumplen los criterios
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    query = """
-        SELECT g.*, a.Nombre as Asignatura, u.Nombre as Profesor, u.Apellidos as Apellidos_Profesor
-        FROM Grupos_tutoria g
-        LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-        JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-        WHERE 1=1
-    """
-    params = []
-    
-    if profesor_id is not None:
-        query += " AND g.Id_usuario = ?"
-        params.append(profesor_id)
-    
-    if asignatura_id is not None:
-        query += " AND g.Id_asignatura = ?"
-        params.append(asignatura_id)
-    
-    # Añadir condición para mostrar solo grupos válidos
-    query += " AND g.Chat_id IS NOT NULL"
-    
-    cursor.execute(query, params)
-    
-    grupos = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    
-    return grupos
-
-def obtener_grupos_por_asignaturas(asignaturas_ids):
-    """Obtiene grupos de tutorías para múltiples asignaturas"""
-    if not asignaturas_ids:
-        return []
-        
-    placeholders = ",".join(["?" for _ in asignaturas_ids])
-    
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute(f"""
-        SELECT g.*, a.Nombre as Asignatura, u.Nombre as Profesor, u.Apellidos as Apellidos_Profesor
-        FROM Grupos_tutoria g
-        JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-        JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-        WHERE g.Id_asignatura IN ({placeholders}) AND g.Chat_id IS NOT NULL
-        ORDER BY u.Nombre, g.Nombre_sala
-    """, asignaturas_ids)
-    
-    grupos = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    
-    return grupos
-
-def obtener_grupo_por_id(grupo_id):
-    """Obtiene un grupo de tutoría por su ID"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT g.*, a.Nombre as Asignatura, u.Nombre as Profesor, u.Apellidos as Apellidos_Profesor
-        FROM Grupos_tutoria g
-        LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-        JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-        WHERE g.id_sala = ?
-    """, (grupo_id,))
-    
-    grupo = cursor.fetchone()
-    conn.close()
-    
-    return dict(grupo) if grupo else None
-
-def añadir_estudiante_grupo(grupo_id, estudiante_id):
-    """Añade un estudiante a un grupo de tutoría"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute("""
-            INSERT INTO Miembros_Grupo (id_sala, Id_usuario)
-            VALUES (?, ?)
-        """, (grupo_id, estudiante_id))
-        
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        # El estudiante ya está en el grupo
-        return True
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Error al añadir estudiante al grupo: {e}")
-        return False
-    finally:
-        conn.close()
-
-# ===== PROFESORES Y HORARIOS =====
-def obtener_profesores_por_asignaturas(asignaturas_ids):
-    """Obtiene profesores que imparten las asignaturas especificadas"""
-    if not asignaturas_ids:
-        return []
-        
-    placeholders = ",".join(["?" for _ in asignaturas_ids])
-    
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute(f"""
-        SELECT DISTINCT u.Id_usuario, u.Nombre, u.Apellidos, u.Email_UGR, hp.dia || ' de ' || hp.hora_inicio || ' a ' || hp.hora_fin AS Horario
-        FROM Usuarios u
-        JOIN Matriculas m ON u.Id_usuario = m.Id_usuario
-        LEFT JOIN Horarios_Profesores hp ON u.Id_usuario = hp.Id_usuario
-        WHERE u.Tipo = 'profesor' AND m.Id_asignatura IN ({placeholders})
-    """, asignaturas_ids)
-    
-    profesores = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    
-    return profesores
-
-def get_horarios_profesor(profesor_id):
-    """Obtiene el horario de un profesor desde la tabla Usuarios"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute('''
-            SELECT 
-                Id_usuario,
-                Nombre,
-                Horario
-            FROM 
-                Usuarios
-            WHERE 
-                Id_usuario = ? AND Tipo = 'profesor'
-        ''', (profesor_id,))
-        
-        result = cursor.fetchone()
-        
-        if not result or not result['Horario']:
-            print(f"No se encontró horario para profesor ID: {profesor_id}")
-            return None
-            
-        return result['Horario']
-    except Exception as e:
-        import logging
-        logging.getLogger('db.queries').error(f"Error al obtener horario: {e}")
-        return None
-    finally:
-        conn.close()
-
-def verificar_disponibilidad_profesor(profesor_id):
-    """Verifica si un profesor está disponible actualmente según su horario"""
-    from handlers.tutorias import verificar_horario_tutoria
-    
-    # Obtener horario del profesor
-    horario = get_horarios_profesor(profesor_id)
-    
-    # Si no hay horario registrado, asumir no disponible
-    if not horario:
-        return False
-        
-    # Verificar si estamos en horario de tutoría
-    return verificar_horario_tutoria(horario)
-
-# ===== ASIGNATURAS Y CARRERAS =====
-def get_o_crear_carrera(nombre_carrera):
-    """Obtiene una carrera por nombre o la crea si no existe"""
-    if not nombre_carrera or nombre_carrera.strip() == '':
-        return None  # No crear carreras vacías
-        
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Buscar la carrera por nombre
-        cursor.execute("SELECT id_carrera FROM Carreras WHERE Nombre_carrera = ?", (nombre_carrera,))
-        carrera = cursor.fetchone()
-        
-        if carrera:
-            # La carrera ya existe
-            carrera_id = carrera[0]
-        else:
-            # Crear nueva carrera
-            cursor.execute("INSERT INTO Carreras (Nombre_carrera) VALUES (?)", (nombre_carrera,))
-            carrera_id = cursor.lastrowid
-            conn.commit()
-            
-        return carrera_id
-        
-    except Exception as e:
-        print(f"Error al obtener/crear carrera: {e}")
-        return None
-        
-    finally:
-        conn.close()
-
-def get_carreras():
-    """Obtiene todas las carreras"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT id_carrera, Nombre_carrera FROM Carreras ORDER BY Nombre_carrera")
-    carreras = [dict(row) for row in cursor.fetchall()]
-    
-    conn.close()
-    return carreras
-
-def get_carreras_by_area(area_id=None):
-    """
-    Función de compatibilidad que mantiene la interfaz anterior.
-    Ahora simplemente devuelve todas las carreras sin filtrar por área.
-    
-    Args:
-        area_id: Ignorado, mantenido para compatibilidad
-        
-    Returns:
-        list: Lista de todas las carreras
-    """
-    # Simplemente llamamos a la nueva función sin filtrado por área
-    return get_carreras()
-
-def crear_asignatura(nombre, sigla=None, id_carrera=None):
-    """Crea una nueva asignatura en la base de datos"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Verificar columnas existentes
-        cursor.execute("PRAGMA table_info(Asignaturas)")
-        columnas = [col[1] for col in cursor.fetchall()]
-        
-        # Construir consulta según columnas disponibles
-        if 'Sigla' in columnas and 'Id_carrera' in columnas:
-            cursor.execute(
-                "INSERT INTO Asignaturas (Nombre, Sigla, Id_carrera) VALUES (?, ?, ?)",
-                (nombre, sigla, id_carrera)
-            )
-        elif 'Sigla' in columnas:
-            cursor.execute(
-                "INSERT INTO Asignaturas (Nombre, Sigla) VALUES (?, ?)",
-                (nombre, sigla)
-            )
-        else:
-            # Sin columna Sigla
-            cursor.execute(
-                "INSERT INTO Asignaturas (Nombre) VALUES (?)",
-                (nombre,)
-            )
-        
-        conn.commit()
+        if do_commit:
+            commit()
         return cursor.lastrowid
     except Exception as e:
         print(f"Error al crear asignatura: {e}")
-        conn.rollback()
+        rollback()
         return None
-    finally:
-        conn.close()
-
-def crear_matricula(id_usuario, id_asignatura, tipo_usuario='estudiante', verificar_duplicados=True):
-    """Crea una nueva matrícula para un usuario en una asignatura"""
-    if id_usuario is None or id_asignatura is None:
-        print("Error: Usuario o asignatura inválidos")
-        return False
-        
-    conn = get_db_connection()
-    cursor = conn.cursor()
     
+def update_asignatura(asignatura_id, do_commit=True,  **kwargs):
+    """Actualiza los datos de una asignatura existente"""
+    allowed_fields = {"Nombre", "Codigo_Asignatura", "Id_carrera"}
+    if not all(k in allowed_fields for k in kwargs):
+        raise ValueError("Campo inválido en la actualización de asignatura")
+
     try:
-        # Verificar si ya existe esta matrícula
-        if verificar_duplicados:
-            cursor.execute(
-                "SELECT * FROM Matriculas WHERE Id_usuario = ? AND Id_asignatura = ?",
-                (id_usuario, id_asignatura)
-            )
-            if cursor.fetchone():
-                # Ya existe, no hacer nada
-                print(f"  ⏩ Matrícula ya existente - omitiendo")
-                return True
-        
-        # Crear nueva matrícula
+        query = "UPDATE Asignaturas SET "
+        query += ", ".join([f"{k} = ?" for k in kwargs])
+        query += " WHERE Id_asignatura = ?"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()) + [asignatura_id])
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al actualizar asignatura: {e}")
+        rollback()
+        return False
+
+def delete_asignatura(asignatura_id):
+    cursor = get_cursor()
+    try:
+        cursor.execute("DELETE FROM Asignaturas WHERE Id_asignatura = ?", (asignatura_id,))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar asignatura: {e}")
+        rollback()
+
+def get_asignaturas(**kwargs):
+    allowed_fields = {"Id_asignatura", "Nombre", "Codigo_Asignatura", "Id_carrera"}
+    try:
+        if not all(k in allowed_fields for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Asignaturas")
+
+        query = "SELECT * FROM Asignaturas WHERE 1=1"
+        for k in kwargs:
+            query += f" AND {k} = ?"
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return cursor.fetchall()
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al obtener asignatura(s): {e}")
+        rollback()
+        return None
+
+
+
+##=====================
+## ===== Carreras =====
+##=====================
+
+def insert_carrera(nombre_carrera, do_commit=True):
+    cursor = get_cursor()
+    try:
+        cursor.execute("INSERT INTO Carreras (Nombre_carrera) VALUES (?)", (nombre_carrera,))
+        if do_commit:
+            commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error al crear carrera: {e}")
+        rollback()
+        return None
+    
+def update_carrera(carrera_id, do_commit=True, **kwargs):
+    """Actualiza los datos de una carrera existente"""
+    allowed_fields = {"Nombre_carrera"}
+    if not all(k in allowed_fields for k in kwargs):
+        raise ValueError("Campo inválido en la actualización de carrera")
+
+    try:
+        query = "UPDATE Carreras SET "
+        query += ", ".join([f"{k} = ?" for k in kwargs])
+        query += " WHERE id_carrera = ?"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()) + [carrera_id])
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al actualizar carrera: {e}")
+        rollback()
+        return False
+
+def delete_carrera(carrera_id):
+    cursor = get_cursor()
+    try:
+        cursor.execute("DELETE FROM Carreras WHERE id_carrera = ?", (carrera_id,))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar carrera: {e}")
+        rollback()
+
+def get_carreras(**kwargs):
+    allowed_fields = {"id_carrera", "Nombre_carrera"}
+    try:
+        if not all(k in allowed_fields for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Carreras")
+
+        query = "SELECT * FROM Carreras WHERE 1=1"
+        for k in kwargs:
+            query += f" AND {k} = ?"
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return cursor.fetchall()
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al obtener carrera(s): {e}")
+        rollback()
+        return None
+
+
+
+##===========================
+## ===== Grupos_tutoria =====
+##===========================
+
+def insert_grupo_tutoria(id_usuario, nombre_sala, tipo_sala, id_asignatura = None, chat_id = None, enlace_invitacion = None, proposito_sala = None, do_commit=True):
+    cursor = get_cursor()
+    try:
         cursor.execute(
-            "INSERT INTO Matriculas (Id_usuario, Id_asignatura, Tipo) VALUES (?, ?, ?)",
-            (id_usuario, id_asignatura, tipo_usuario)
+            """INSERT INTO Grupos_tutoria 
+            (Id_usuario, Nombre_sala, Tipo_sala, Id_asignatura, Chat_id, Enlace_invitacion, Proposito_sala) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (id_usuario, nombre_sala, tipo_sala, id_asignatura, chat_id, enlace_invitacion, proposito_sala)
         )
-        conn.commit()
-        return True
+        if do_commit:
+            commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error al crear grupo de tutoría: {e}")
+        rollback()
+        return None
+    
+def update_grupo_tutoria(sala_id, do_commit=True, **kwargs):
+    """Actualiza los datos de una sala de tutoría"""
+    allowed_fields = {"Id_usuario", "Nombre_sala", "Tipo_sala", "Id_asignatura", "Chat_id", "Enlace_invitacion", "Proposito_sala"}
+    if not all(k in allowed_fields for k in kwargs):
+        raise ValueError("Campo inválido en la actualización del grupo de tutoría")
+
+    try:
+        query = "UPDATE Grupos_tutoria SET "
+        query += ", ".join([f"{k} = ?" for k in kwargs])
+        query += " WHERE id_sala = ?"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()) + [sala_id])
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al actualizar grupo_tutoria: {e}")
+        rollback()
+        return False
+
+def delete_grupo_tutoria(id_sala):
+    cursor = get_cursor()
+    try:
+        cursor.execute("DELETE FROM Grupos_tutoria WHERE id_sala = ?", (id_sala,))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar grupo de tutoría: {e}")
+        rollback()
+
+def get_grupos_tutoria(**kwargs):
+    allowed_fields = {
+        "id_sala", "Id_usuario", "Nombre_sala", "Tipo_sala", "Id_asignatura",
+        "Chat_id", "Enlace_invitacion", "Proposito_sala", "Fecha_creacion"
+    }
+    try:
+        if not all(k in allowed_fields for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Grupos_tutoria")
+
+        query = """SELECT g.*, a.Nombre as Asignatura, u.Nombre as Profesor, u.Apellidos as Apellidos_Profesor
+            FROM Grupos_tutoria g
+            LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
+            JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
+            WHERE 1=1"""
+        for k in kwargs:
+            query += f" AND g.{k} = ?"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return cursor.fetchall()
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al obtener grupo de tutoría: {e}")
+        rollback()
+        return None
+
+def get_grupos_tutoria_by_multiple_ids(asignaturas_ids):
+    """Obtiene grupos de tutorías para múltiples asignaturas"""
+    if not asignaturas_ids:
+        return []
+
+    cursor = get_cursor()
+
+    try:
+        placeholders = ",".join(["?" for _ in asignaturas_ids])
+
+        cursor.execute(f"""
+            SELECT g.*, a.Nombre as Asignatura, u.Nombre as Profesor, u.Apellidos as Apellidos_Profesor
+            FROM Grupos_tutoria g
+            JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
+            JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
+            WHERE g.Id_asignatura IN ({placeholders}) AND g.Chat_id IS NOT NULL
+            ORDER BY u.Nombre, g.Nombre_sala
+        """, asignaturas_ids)
+
+        return [dict(row) for row in cursor.fetchall()]
+
+    except Exception as e:
+        import logging
+        logging.getLogger("db.queries").error(f"Error al obtener grupos por asignaturas: {e}")
+        return []
+    
+
+
+##=====================
+## ===== Horarios =====
+##=====================
+
+def insert_horario(id_usuario, dia, hora_inicio, hora_fin, do_commit=True):
+    cursor = get_cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO Horarios_Profesores (Id_usuario, dia, hora_inicio, hora_fin) VALUES (?, ?, ?, ?)",
+            (id_usuario, dia, hora_inicio, hora_fin)
+        )
+        if do_commit:
+            commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error al crear horario de profesor: {e}")
+        rollback()
+        return None
+    
+def update_horario(horario_id, do_commit=True, **kwargs):
+    """Actualiza los datos de un horario de profesor"""
+    allowed_fields = {"Id_usuario", "dia", "hora_inicio", "hora_fin"}
+    if not all(k in allowed_fields for k in kwargs):
+        raise ValueError("Campo inválido en la actualización del horario")
+
+    try:
+        query = "UPDATE Horarios_Profesores SET "
+        query += ", ".join([f"{k} = ?" for k in kwargs])
+        query += " WHERE id_horario = ?"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()) + [horario_id])
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al actualizar horario: {e}")
+        rollback()
+        return False
+
+def delete_horario(id_horario):
+    cursor = get_cursor()
+    try:
+        cursor.execute("DELETE FROM Horarios_Profesores WHERE id_horario = ?", (id_horario,))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar horario de profesor: {e}")
+        rollback()
+
+def get_horarios(**kwargs):
+    allowed_fields = {"id_horario", "Id_usuario", "dia", "hora_inicio", "hora_fin"}
+    try:
+        if not all(k in allowed_fields for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Horarios_Profesores")
+
+        query = "SELECT * FROM Horarios_Profesores WHERE 1=1"
+        for k in kwargs:
+            query += f" AND {k} = ?"
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return cursor.fetchall()
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al obtener horario de profesor: {e}")
+        rollback()
+        return None
+
+
+##=======================
+## ===== Matriculas =====
+##=======================
+
+def insert_matricula(id_usuario, id_asignatura, curso, tipo, do_commit=True):
+    cursor = get_cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO Matriculas (Id_usuario, Id_asignatura, Curso, Tipo) VALUES (?, ?, ?, ?)",
+            (id_usuario, id_asignatura, curso, tipo)
+        )
+        if do_commit:
+            commit()
+        return cursor.lastrowid
     except Exception as e:
         print(f"Error al crear matrícula: {e}")
-        conn.rollback()
+        rollback()
+        return None
+    
+def update_matricula(matricula_id, do_commit=True, **kwargs):
+    """Actualiza los datos de una matrícula"""
+    allowed_fields = {"Id_usuario", "Id_asignatura", "Curso", "Tipo"}
+    if not all(k in allowed_fields for k in kwargs):
+        raise ValueError("Campo inválido en la actualización de matrícula")
+
+    try:
+        query = "UPDATE Matriculas SET "
+        query += ", ".join([f"{k} = ?" for k in kwargs])
+        query += " WHERE id_matricula = ?"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()) + [matricula_id])
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al actualizar matrícula: {e}")
+        rollback()
         return False
-    finally:
-        conn.close()
 
-def get_salas_profesor_asignatura(profesor_id, asignatura_id):
-    """
-    Obtiene las salas de tutoría de un profesor para una asignatura específica
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT g.*, u.Nombre as NombreProfesor 
-        FROM Grupos_tutoria g
-        JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-        WHERE g.Id_usuario = ? AND (g.Id_asignatura = ? OR g.Id_asignatura IS NULL)
-        ORDER BY g.Proposito_sala ASC
-    """, (profesor_id, asignatura_id))
-    
-    salas = cursor.fetchall()
-    conn.close()
-    
-    return salas if salas else []
+def delete_matricula(id_matricula):
+    cursor = get_cursor()
+    try:
+        cursor.execute("DELETE FROM Matriculas WHERE id_matricula = ?", (id_matricula,))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar matrícula: {e}")
+        rollback()
+
+def get_matriculas(**kwargs):
+    allowed_fields = {"id_matricula", "Id_usuario", "Id_asignatura", "Curso", "Tipo"}
+    try:
+        if not all(k in allowed_fields for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Matriculas")
+
+        query = """SELECT m.*, a.Nombre AS Asignatura, a.Codigo_Asignatura AS Codigo, u.Carrera AS Carrera 
+                    FROM Matriculas m
+                    JOIN 
+                    Asignaturas a ON m.Id_asignatura = a.Id_asignatura
+                    JOIN
+                    Usuarios u ON m.Id_usuario = u.Id_usuario
+                    WHERE 1=1"""
+        for k in kwargs:
+            query += f" AND m.{k} = ?"
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return cursor.fetchall()
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al obtener matrícula(s): {e}")
+        rollback()
+        return None
 
 
-def get_profesores_asignatura(asignatura_id):
-    """
-    Obtiene todos los profesores que imparten una asignatura específica
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
+
+##===========================
+## ===== Miembros_Grupo =====
+##===========================
+
+def insert_miembro_grupo(id_sala, id_usuario, estado='activo', do_commit=True):
+    cursor = get_cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO Miembros_Grupo (id_sala, Id_usuario, Estado) VALUES (?, ?, ?)",
+            (id_sala, id_usuario, estado)
+        )
+        if do_commit:
+            commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error al añadir miembro al grupo: {e}")
+        rollback()
+        return None
     
-    cursor.execute("""
-        SELECT DISTINCT u.*
-        FROM Usuarios u
-        JOIN Matriculas m ON u.Id_usuario = m.Id_usuario
-        WHERE m.Id_asignatura = ? 
-        AND u.Tipo = 'profesor' 
-        AND m.Tipo = 'docente'
-    """, (asignatura_id,))
+def update_miembro_grupo(sala_id, usuario_id, estado, do_commit=True):
+    """Actualiza los datos de un miembro de grupo"""
+    try:
+        cursor = get_cursor()
+        cursor.execute("UPDATE Miembros_Grupo SET Estado = ? WHERE id_sala = ? AND Id_usuario = ?"
+                       , (estado, sala_id, usuario_id))
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al actualizar miembro_grupo: {e}")
+        rollback()
+        return False
+
+def delete_miembro_grupo(id_usuario, id_sala):
+    cursor = get_cursor()
+    try:
+        cursor.execute("""
+            DELETE FROM Miembros_Grupo 
+            WHERE id_usuario = ? AND id_sala = ?
+        """, (id_usuario, id_sala))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar miembro del grupo: {e}")
+        rollback()
+
+def delete_todos_miembros_grupo(id_sala):
+    cursor = get_cursor()
+    try:
+        cursor.execute("""
+            DELETE FROM Miembros_Grupo 
+            WHERE id_sala = ?
+        """, (id_sala))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar miembro del grupo: {e}")
+        rollback()
+
+def get_miembros_grupos(**kwargs):
+    allowed_fields = {"id_miembro", "id_sala", "Id_usuario", "Fecha_union", "Estado"}
+    try:
+        if not all(k in allowed_fields for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Miembros_Grupo")
+
+        query = "SELECT * FROM Miembros_Grupo WHERE 1=1"
+        for k in kwargs:
+            query += f" AND {k} = ?"
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return cursor.fetchall()
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al obtener miembro(s) del grupo: {e}")
+        rollback()
+        return None
+
+
+##=========================
+## ===== Valoraciones =====
+##=========================
+
+def insert_valoracion(evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, id_sala, do_commit=True):
+    cursor = get_cursor()
+    try:
+        cursor.execute(
+            """INSERT INTO Valoraciones 
+            (evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, id_sala)
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, id_sala)
+        )
+        if do_commit:
+            commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error al crear valoración: {e}")
+        rollback()
+        return None
     
-    profesores = cursor.fetchall()
-    conn.close()
-    
-    return profesores if profesores else []
+
+def update_valoracion(valoracion_id, do_commit=True, **kwargs):
+    """Actualiza los datos de una valoración"""
+    allowed_fields = {"evaluador_id", "profesor_id", "puntuacion", "comentario", "fecha", "es_anonimo", "id_sala"}
+    if not all(k in allowed_fields for k in kwargs):
+        raise ValueError("Campo inválido en la actualización de valoración")
+
+    try:
+        query = "UPDATE Valoraciones SET "
+        query += ", ".join([f"{k} = ?" for k in kwargs])
+        query += " WHERE id_valoracion = ?"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()) + [valoracion_id])
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al actualizar valoración: {e}")
+        rollback()
+        return False
+
+def delete_valoracion(id_valoracion):
+    cursor = get_cursor()
+    try:
+        cursor.execute("DELETE FROM Valoraciones WHERE id_valoracion = ?", (id_valoracion,))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar valoración: {e}")
+        rollback()
+
+def get_valoraciones(**kwargs):
+    allowed_fields = {
+        "id_valoracion", "evaluador_id", "profesor_id", "puntuacion", "comentario",
+        "fecha", "es_anonimo", "id_sala"
+    }
+    try:
+        if not all(k in allowed_fields for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Valoraciones")
+
+        query = "SELECT * FROM Valoraciones WHERE 1=1"
+        for k in kwargs:
+            query += f" AND {k} = ?"
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return cursor.fetchall()
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al obtener valoración(es): {e}")
+        rollback()
+        return None

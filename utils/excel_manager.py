@@ -8,12 +8,15 @@ import sqlite3
 from datetime import datetime
 import openpyxl
 
+from db.queries import get_asignaturas, get_usuarios, insert_asignatura, insert_matricula, insert_usuario, update_asignatura, update_usuario
+
 # Añadir directorio raíz al path
 sys.path.append(str(Path(__file__).parent.parent))
-from db.queries import get_db_connection, get_o_crear_carrera
+from utils.db_utils import get_or_insert_carrera, crear_o_actualizar_matricula
 
 # Configurar logger
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', filename='logs/excel_manager.log')
 
 # Variables globales para almacenar datos
 usuarios_excel = {}  # {email: {datos...}}
@@ -172,10 +175,7 @@ def cargar_excel_a_base_de_datos():
         # Contadores para estadísticas
         usuarios_procesados = 0
         asignaturas_procesadas = 0
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
+                
         # Procesar cada fila del Excel
         for i, row in df.iterrows():
             try:
@@ -198,32 +198,39 @@ def cargar_excel_a_base_de_datos():
                 carrera = row.get('Carrera', '').strip()
                 
                 # Comprobar si el usuario ya existe
-                cursor.execute("SELECT Id_usuario FROM Usuarios WHERE Email_UGR = ?", (email,))
-                usuario_existente = cursor.fetchone()
+                usuario_existente = get_usuarios(Email_UGR=email)[0]["Id_usuario"]
                 
                 if usuario_existente:
                     # Actualizar usuario existente
-                    cursor.execute("""
-                        UPDATE Usuarios 
-                        SET Nombre=?, Apellidos=?, DNI=?, Tipo=?, Carrera=?
-                        WHERE Email_UGR=?
-                    """, (nombre, apellidos, dni, tipo, carrera, email))
-                    user_id = usuario_existente[0]
+                    update_usuario(
+                        usuario_existente,
+                        Nombre=nombre,
+                        Apellidos=apellidos,
+                        DNI=dni,
+                        Tipo=tipo,
+                        Carrera=carrera,
+                        do_commit=False
+                    )
+                    user_id = usuario_existente
                     print(f"✓ Usuario actualizado: {nombre} ({email})")
                 else:
                     # Crear nuevo usuario
-                    cursor.execute("""
-                        INSERT INTO Usuarios (Nombre, Apellidos, DNI, Email_UGR, Tipo, Carrera)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (nombre, apellidos, dni, email, tipo, carrera))
-                    user_id = cursor.lastrowid
+                    user_id = insert_usuario(
+                        Nombre=nombre,
+                        Apellidos=apellidos,
+                        DNI=dni,
+                        Email_UGR=email,
+                        Tipo=tipo,
+                        Carrera=carrera,
+                        do_commit=False
+                    )
                     print(f"✓ Usuario creado: {nombre} ({email}) con ID: {user_id}")
                 
                 usuarios_procesados += 1
                 
                 # Procesar carrera
                 if carrera:
-                    carrera_id = get_o_crear_carrera(carrera)
+                    carrera_id = get_or_insert_carrera(carrera)
                 else:
                     carrera_id = None
                 
@@ -250,30 +257,32 @@ def cargar_excel_a_base_de_datos():
                         continue
                     
                     # Buscar o crear asignatura
-                    cursor.execute("SELECT Id_asignatura FROM Asignaturas WHERE Nombre = ?", (asig_nombre,))
-                    asig = cursor.fetchone()
+                    asig = get_asignaturas(Nombre=asig_nombre)[0]
                     
                     if not asig:
-                        cursor.execute("""
-                            INSERT INTO Asignaturas (Nombre, Id_carrera) 
-                            VALUES (?, ?)
-                        """, (asig_nombre, carrera_id))
-                        asig_id = cursor.lastrowid
+                        asig_id = insert_asignatura(
+                            Nombre=asig_nombre,
+                            Id_carrera=carrera_id,
+                            do_commit=False
+                        )
                     else:
-                        asig_id = asig[0]
+                        asig_id = asig['Id_asignatura']
                         
                         # Actualizar carrera si es necesario
                         if carrera_id:
-                            cursor.execute("""
-                                UPDATE Asignaturas SET Id_carrera = ? 
-                                WHERE Id_asignatura = ? AND (Id_carrera IS NULL OR Id_carrera = '')
-                            """, (carrera_id, asig_id))
+                            update_asignatura(
+                                asig_id,
+                                Id_carrera=carrera_id,
+                                do_commit=False
+                            )
                     
                     # Crear matrícula
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO Matriculas (Id_usuario, Id_asignatura, Tipo) 
-                        VALUES (?, ?, ?)
-                    """, (user_id, asig_id, tipo))
+                    insert_matricula(
+                        Id_usuario=user_id,
+                        Id_asignatura=asig_id,
+                        tipo=tipo,
+                        do_commit=True
+                    )
                     
                     asignaturas_procesadas += 1
                     print(f"  ✓ Asignatura: {asig_nombre} - ID: {asig_id}")
@@ -282,8 +291,6 @@ def cargar_excel_a_base_de_datos():
                 print(f"❌ Error en fila {i+1}: {e}")
                 continue
         
-        conn.commit()
-        conn.close()
         global excel_last_updated
         excel_last_updated = datetime.now().strftime("%Y-%m-%d %H:%M")
         
@@ -297,16 +304,10 @@ def cargar_excel_a_base_de_datos():
 
 def buscar_usuario_por_email(email):
     """Busca un usuario por su email en los datos del Excel"""
-    from db.queries import get_db_connection
-    
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
+        
     email = email.lower().strip()
-    cursor.execute("SELECT * FROM Usuarios WHERE Email_UGR = ?", (email,))
-    result = cursor.fetchone()
+    result = get_usuarios(email_UGR=email)[0]
     
-    conn.close()
     return result
 
 def get_last_updated():
@@ -362,14 +363,14 @@ def importar_datos_por_email(email):
         user_data = user_row.iloc[0]
         
         # Crear usuario en DB
-        from db.queries import create_user, update_user
+        from db.queries import insert_usuario, update_usuario
         
         # Crear nuevo usuario o actualizar existente
         user = buscar_usuario_por_email(email)
         
         if user:
             user_id = user['Id_usuario']
-            update_user(
+            update_usuario(
                 user_id,
                 Nombre=user_data.get('Nombre'),
                 Apellidos=user_data.get('Apellidos'),
@@ -378,7 +379,7 @@ def importar_datos_por_email(email):
             )
             print(f"✓ Usuario actualizado: {user_id}")
         else:
-            user_id = create_user(
+            user_id = insert_usuario(
                 nombre=user_data.get('Nombre'),
                 apellidos=user_data.get('Apellidos'),
                 tipo=user_data.get('Tipo', 'estudiante'),
@@ -392,7 +393,7 @@ def importar_datos_por_email(email):
         # Procesar carrera
         carrera = user_data.get('Carrera')
         if carrera:
-            carrera_id = get_o_crear_carrera(carrera)
+            carrera_id = get_or_insert_carrera(carrera)
             
             # Procesar asignaturas
             asignaturas = []
@@ -418,31 +419,26 @@ def importar_datos_por_email(email):
                     
                 # Procesamiento especial para asignaturas separadas por comas en el mismo campo
                 asig_parts = [a.strip() for a in asig_nombre.split(',') if a.strip()]
-                for asig in asig_parts:
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    
+                for asig in asig_parts:                    
                     # Buscar o crear asignatura
-                    cursor.execute("SELECT Id_asignatura FROM Asignaturas WHERE Nombre = ?", (asig,))
-                    asig_row = cursor.fetchone()
+                    asig_row = get_asignaturas(Nombre=asig)[0]
                     
                     if not asig_row:
-                        cursor.execute("""
-                            INSERT INTO Asignaturas (Nombre, Id_carrera) 
-                            VALUES (?, ?)
-                        """, (asig, carrera_id))
-                        asig_id = cursor.lastrowid
+                        asig_id = insert_asignatura(
+                            Nombre=asig,
+                            Id_carrera=carrera_id,
+                            do_commit=False
+                        )
                     else:
-                        asig_id = asig_row[0]
+                        asig_id = asig_row["Id_asignatura"]
                     
                     # Crear matrícula
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO Matriculas (Id_usuario, Id_asignatura, Tipo)
-                        VALUES (?, ?, ?)
-                    """, (user_id, asig_id, user_data.get('Tipo', 'estudiante')))
-                    
-                    conn.commit()
-                    conn.close()
+                    insert_matricula(
+                        Id_usuario=user_id,
+                        Id_asignatura=asig_id,
+                        Tipo=user_data.get('Tipo', 'estudiante'),
+                        do_commit=True
+                    )
                     print(f"  ✓ Asignatura registrada: {asig}")
         
         return True
@@ -467,15 +463,10 @@ def importar_datos_desde_excel(df=None, solo_nuevos=True):
         df: DataFrame opcional
         solo_nuevos: Si es True, solo importa usuarios/asignaturas que no existan
     """
-    from db.queries import create_user, update_user, get_matriculas_usuario, crear_matricula
+    from db.queries import insert_usuario, update_usuario, get_matriculas
     import pandas as pd
     from config import EXCEL_PATH
-    import logging
-    
-    # Configurar logging
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger('excel_import')
-    
+      
     # Estadísticas
     stats = {
         "usuarios_nuevos": 0,
@@ -506,11 +497,7 @@ def importar_datos_desde_excel(df=None, solo_nuevos=True):
     # Aplicar mapping
     if column_mapping:
         df = df.rename(columns=column_mapping)
-    
-    # Obtener conexión a BD
-    from db.queries import get_db_connection
-    conn = get_db_connection()
-    
+        
     # Procesar filas
     for index, row in df.iterrows():
         try:
@@ -521,9 +508,7 @@ def importar_datos_desde_excel(df=None, solo_nuevos=True):
                 continue
                 
             # Verificar si el usuario ya existe
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM Usuarios WHERE Email_UGR = ?", (email,))
-            usuario = cursor.fetchone()
+            usuario = get_usuarios(Email_UGR=email)[0]
             
             # Si existe y solo queremos nuevos, solo procesamos asignaturas
             if usuario and solo_nuevos:
@@ -540,7 +525,7 @@ def importar_datos_desde_excel(df=None, solo_nuevos=True):
                 if usuario:
                     # Actualizar si lo queremos
                     if not solo_nuevos:
-                        update_user(
+                        update_usuario(
                             user_id=usuario['Id_usuario'],
                             Nombre=nombre,
                             Apellidos=apellidos,
@@ -551,7 +536,7 @@ def importar_datos_desde_excel(df=None, solo_nuevos=True):
                     user_id = usuario['Id_usuario']
                 else:
                     # Crear nuevo
-                    user_id = create_user(
+                    user_id = insert_usuario(
                         nombre=nombre,
                         tipo=tipo,
                         email=email,
@@ -568,7 +553,7 @@ def importar_datos_desde_excel(df=None, solo_nuevos=True):
             # Procesar asignaturas para todos los usuarios
             if user_id:
                 # Obtener asignaturas ya matriculadas
-                asignaturas_actuales = get_matriculas_usuario(user_id)
+                asignaturas_actuales = get_matriculas(Id_usuario=user_id)
                 ids_existentes = set()
                 if asignaturas_actuales:
                     for m in asignaturas_actuales:
@@ -596,18 +581,13 @@ def importar_datos_desde_excel(df=None, solo_nuevos=True):
                         
                         try:
                             # Buscar ID de la asignatura
-                            cursor.execute(
-                                "SELECT Id_asignatura FROM Asignaturas WHERE Nombre = ?", 
-                                (asig_nombre,)
-                            )
-                            result = cursor.fetchone()
+                            result = get_asignaturas(Nombre=asig_nombre)[0]
                             
                             if result:
                                 asig_id = result['Id_asignatura']
                             else:
                                 # Crear la asignatura automáticamente si no existe
-                                from db.queries import crear_asignatura
-                                asig_id = crear_asignatura(nombre=asig_nombre)
+                                asig_id = insert_asignatura(asig_nombre)
                                 print(f"  ➕ Asignatura creada automáticamente: {asig_nombre}")
                             
 
@@ -618,7 +598,7 @@ def importar_datos_desde_excel(df=None, solo_nuevos=True):
                                 
                                 # Crear matrícula con el tipo almacenado
                                 # Solo añadir si no está ya matriculado
-                                crear_matricula(user_id, asig_id, tipo_usuario, verificar_duplicados=solo_nuevos)
+                                crear_o_actualizar_matricula(user_id, asig_id, tipo_usuario, verificar_duplicados=solo_nuevos)
                                 
                                 # Si estamos en modo solo_nuevos, debemos verificar duplicados
                                 if solo_nuevos:
@@ -636,10 +616,7 @@ def importar_datos_desde_excel(df=None, solo_nuevos=True):
         
         except Exception as e:
             print(f"Error en fila {index+1}: {e}")
-    
-    # Cerrar conexión
-    conn.close()
-    
+        
     # Mostrar estadísticas finales
     print("\n📊 RESULTADOS:")
     print(f"✅ Usuarios nuevos: {stats['usuarios_nuevos']}")

@@ -6,16 +6,18 @@ import time
 import logging
 import sys
 import os
+
+import telegram
 # Add parent directory to system path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Now import after modifying the path
-from db.models import get_db_connection
 
-from db.queries import update_user, get_user_by_telegram_id, update_horario_profesor
+from db.queries import get_horarios, update_usuario, get_usuarios
 
 # Configuración del logger
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', filename='logs/horarios.log')
+
 
 # Estados para la conversación
 SELECCIONANDO_DIA = "seleccionando_dia"
@@ -78,15 +80,15 @@ def guardar_horario_bd(chat_id, horario_dict):
                 horario_str += f"{dia} {franja}"
         
         # Obtener el ID del usuario a partir del ID de Telegram
-        user = get_user_by_telegram_id(chat_id)
+        user = get_usuarios(TelegramID=chat_id)[0]
         if not user:
             logger.error(f"No se encontró usuario con telegram_id {chat_id}")
             return False
         
         user_id = user['Id_usuario']  # Obtener el ID de usuario real
-        
+
         # Actualizar en la base de datos usando la función específica
-        return update_horario_profesor(user_id, horario_str)
+        return update_usuario(user_id, Horario=horario_str)
         
     except Exception as e:
         logger.error(f"Error al guardar horario en BD: {e}")
@@ -97,26 +99,17 @@ def cargar_horario_bd(chat_id):
     try:
         # DIAGNÓSTICO: Imprimir valores para depuración
         print(f"Intentando cargar horario para chat_id: {chat_id}")
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Asegurarse de que el cursor devuelva diccionarios en lugar de tuples
-        # Este paso es clave para acceder usando nombres de columnas
-        cursor.row_factory = lambda cursor, row: {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
-        
+               
+
         # Verificar primero si el usuario existe
-        cursor.execute("SELECT Id_usuario, Horario FROM Usuarios WHERE TelegramID = ?", (chat_id,))
-        usuario = cursor.fetchone()
+        usuario = get_usuarios(TelegramID=chat_id)[0]
         
         if not usuario:
             print(f"No se encontró usuario con telegram_id {chat_id}")
-            conn.close()
             return {}
         
         # Ahora podemos acceder por nombre de columna
         user_id = usuario['Id_usuario']
-        print(f"ID de usuario encontrado: {user_id}")
         
         # DIAGNÓSTICO: Verificar si hay un valor directo en el campo Horario
         if usuario['Horario']:
@@ -138,17 +131,10 @@ def cargar_horario_bd(chat_id):
                 print(f"Error al convertir horario de cadena: {e}")
         
         # DIAGNÓSTICO: Si no hay horario en el campo directo, buscar en la tabla Horarios_Profesores
-        print("Buscando en tabla Horarios_Profesores...")
-        cursor.execute(
-            "SELECT dia, hora_inicio, hora_fin FROM Horarios_Profesores WHERE Id_usuario = ?",
-            (user_id,)
-        )
-        
-        horarios = cursor.fetchall()
+        print("Buscando en tabla Horarios_Profesores...")        
+        horarios = get_horarios(Id_usuario=user_id)
         print(f"Registros encontrados en Horarios_Profesores: {len(horarios) if horarios else 0}")
-        
-        conn.close()
-        
+                
         # Convertir a formato de diccionario
         horario_dict = {}
         for h in horarios:
@@ -211,7 +197,7 @@ def register_handlers(bot):
         
         # Verificar si es profesor
         try:
-            user = get_user_by_telegram_id(chat_id)
+            user = get_usuarios(TelegramID=chat_id)[0]
             if not user or user['Tipo'].lower() != 'profesor':
                 bot.send_message(chat_id, "⚠️ Solo los profesores pueden configurar horarios de tutoría.")
                 return
@@ -409,16 +395,17 @@ def register_handlers(bot):
             # Eliminar el día si no quedan franjas
             if not user_data[chat_id]["horario"][dia]:
                 del user_data[chat_id]["horario"][dia]
-            
+
             # Volver al menú de gestión usando la función handle_volver_gestion
             # Creamos un nuevo callback para simular el botón volver
-            new_call = types.CallbackQuery(
+            new_call = telegram.CallbackQuery(
                 id=call.id,
                 from_user=call.from_user,
                 chat_instance=call.chat_instance,
                 data=f"volver_gestion_{dia}",
                 message=call.message
             )
+            
             handle_volver_gestion(new_call)
             
             # Notificar que se eliminó correctamente
@@ -607,7 +594,7 @@ def register_handlers(bot):
         
         # Verificar si es profesor
         try:
-            user = get_user_by_telegram_id(chat_id)
+            user = get_usuarios(TelegramID=chat_id)
             if not user:
                 bot.send_message(chat_id, "⚠️ No se encontraron tus datos en el sistema.")
                 return

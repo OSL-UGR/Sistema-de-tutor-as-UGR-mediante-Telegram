@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from db.queries import (
-    get_user_by_telegram_id,
-    get_carreras_by_area,
-    get_matriculas_by_user,
-    get_db_connection,
-    get_matriculas_usuario,
-    get_profesores_asignatura,
-    get_salas_profesor_asignatura
+    get_grupos_tutoria,
+    get_matriculas,
+    get_miembros_grupos,
+    get_usuarios,
+    get_usuarios_by_multiple_ids,
+    insert_miembro_grupo,
+    update_miembro_grupo
 )
 
 # Añadir la función directamente en este archivo
@@ -63,32 +63,21 @@ def register_handlers(bot):
         print(f"Usuario ID: {user_id}, Chat ID: {chat_id}")
         
         # Obtener información del usuario
-        user = get_user_by_telegram_id(user_id)
+        user = get_usuarios(TelegramID=user_id)[0]
+
+        print("HEYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY")
         
-        # Diagnóstico: Verificar si hay salas en la base de datos
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
+        # Diagnóstico: Verificar si hay salas en la base de datos        
         # Contar todas las salas
-        cursor.execute("SELECT COUNT(*) as total FROM Grupos_tutoria")
-        total_salas = cursor.fetchone()['total']
-        print(f"Total de salas en la BD: {total_salas}")
+        salas = get_grupos_tutoria()
+        print(f"Total de salas en la BD: {len(salas)}")
         
         # Mostrar detalles de algunas salas para diagnóstico
-        if total_salas > 0:
-            cursor.execute("""
-                SELECT 
-                    g.id_sala, g.Id_usuario, g.Nombre_sala, g.Proposito_sala, 
-                    g.Tipo_sala, g.Id_asignatura, a.Nombre as NombreAsignatura
-                FROM Grupos_tutoria g
-                LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-                LIMIT 5
-            """)
-            
+        if len(salas) > 0:            
             print("Primeras 5 salas en la BD:")
-            for sala in cursor.fetchall():
+            for sala in salas[:5]:
                 print(f"  - ID: {sala['id_sala']}, Nombre: {sala['Nombre_sala']}")
-                print(f"    Profesor: {sala['Id_usuario']}, Asignatura: {sala['Id_asignatura']} ({sala['NombreAsignatura']})")
+                print(f"    Profesor: {sala['Id_usuario']}, Asignatura: {sala['Id_asignatura']} ({sala['Asignatura']})")
                 print(f"    Tipo: {sala['Tipo_sala']}, Propósito: {sala['Proposito_sala']}")
                 print("    ---")
         
@@ -104,22 +93,11 @@ def register_handlers(bot):
         
         print(f"✅ Estudiante: {user['Nombre']} {user['Apellidos'] or ''}")
         
-        # Obtener las asignaturas del estudiante
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT a.Id_asignatura, a.Nombre as Asignatura
-            FROM Matriculas m
-            JOIN Asignaturas a ON m.Id_asignatura = a.Id_asignatura
-            WHERE m.Id_usuario = ?
-        """, (user['Id_usuario'],))
-        
-        asignaturas = cursor.fetchall()
+        # Obtener las asignaturas del estudiante        
+        asignaturas = get_matriculas(Id_usuario=user['Id_usuario'])
         
         if not asignaturas:
             bot.send_message(chat_id, "❌ No estás matriculado en ninguna asignatura.")
-            conn.close()
             print("❌ Estudiante sin asignaturas")
             return
         
@@ -127,38 +105,12 @@ def register_handlers(bot):
         
         # Obtener IDs de asignaturas para usar en consultas
         asignaturas_ids = [a['Id_asignatura'] for a in asignaturas]
-        placeholders = ','.join(['?'] * len(asignaturas_ids))
+
+        matriculas_profesores = get_matriculas(Tipo='docente')
+        profesores_ids = [m['Id_usuario'] for m in matriculas_profesores if m['Id_asignatura'] in asignaturas_ids]
         
-        # Obtener profesores que tienen grupos de tutoría para estas asignaturas
-        # O profesores que son de estas asignaturas según las matrículas (donde son docentes)
-        cursor.execute(f"""
-            SELECT DISTINCT 
-                u.Id_usuario, 
-                u.Nombre, 
-                u.Apellidos, 
-                u.Email_UGR, 
-                u.horario
-            FROM Usuarios u
-            WHERE u.Tipo = 'profesor' 
-            AND (
-                -- Profesores que han creado grupos para estas asignaturas
-                u.Id_usuario IN (
-                    SELECT DISTINCT g.Id_usuario 
-                    FROM Grupos_tutoria g 
-                    WHERE g.Id_asignatura IN ({placeholders})
-                )
-                OR
-                -- O profesores que tienen matrículas como docentes en estas asignaturas
-                u.Id_usuario IN (
-                    SELECT DISTINCT m.Id_usuario 
-                    FROM Matriculas m 
-                    WHERE m.Id_asignatura IN ({placeholders}) AND m.Tipo = 'docente'
-                )
-            )
-            ORDER BY u.Apellidos, u.Nombre
-        """, asignaturas_ids + asignaturas_ids)
-        
-        profesores_raw = cursor.fetchall()
+        # Obtener profesores que son de estas asignaturas según las matrículas (donde son docentes)
+        profesores_raw = get_usuarios_by_multiple_ids(profesores_ids)
         print(f"✅ Profesores encontrados: {len(profesores_raw)}")
         
         # Convertir a diccionario para facilitar el acceso
@@ -169,41 +121,25 @@ def register_handlers(bot):
                 'id': prof_id,
                 'nombre': f"{profesor['Nombre']} {profesor['Apellidos'] or ''}".strip(),
                 'email': profesor['Email_UGR'],
-                'horario': profesor['horario'] or 'No especificado',
+                'horario': profesor['Horario'] or 'No especificado',
                 'asignaturas': {}
             }
         
         # Obtener asignaturas por profesor (basado en matrículas de tipo 'docente' y en grupos creados)
         for profesor_id in profesores:
             # Buscar asignaturas por matrículas donde es docente
-            cursor.execute(f"""
-                SELECT DISTINCT
-                    a.Id_asignatura,
-                    a.Nombre as NombreAsignatura,
-                    a.Codigo_Asignatura as Codigo
-                FROM Matriculas m
-                JOIN Asignaturas a ON m.Id_asignatura = a.Id_asignatura
-                WHERE m.Id_usuario = ? AND m.Tipo = 'docente' AND m.Id_asignatura IN ({placeholders})
-                
-                UNION
-                
-                -- Asignaturas por grupos que ha creado
-                SELECT DISTINCT
-                    a.Id_asignatura,
-                    a.Nombre as NombreAsignatura,
-                    a.Codigo_Asignatura as Codigo
-                FROM Grupos_tutoria g
-                JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-                WHERE g.Id_usuario = ? AND g.Id_asignatura IN ({placeholders})
-            """, [profesor_id] + asignaturas_ids + [profesor_id] + asignaturas_ids)
-            
-            asignaturas_profesor = cursor.fetchall()
-            
+            asignaturas_profesor = get_matriculas(Tipo='docente', Id_usuario=profesor_id)
+            asignaturas_alumno_profesor = []
+
             for asig in asignaturas_profesor:
+                if asig['Id_asignatura'] in asignaturas_ids:
+                    asignaturas_alumno_profesor.append(asig)
+            
+            for asig in asignaturas_alumno_profesor:
                 if asig['Id_asignatura'] is not None:  # Si la asignatura existe
                     profesores[profesor_id]['asignaturas'][asig['Id_asignatura']] = {
                         'id': asig['Id_asignatura'],
-                        'nombre': asig['NombreAsignatura'],
+                        'nombre': asig['Asignatura'],
                         'codigo': asig['Codigo'],
                         'salas': []
 
@@ -219,22 +155,7 @@ def register_handlers(bot):
         
         # Obtener todas las salas de cada profesor
         for profesor_id in profesores:
-            cursor.execute("""
-                SELECT 
-                    g.id_sala,
-                    g.Nombre_sala,
-                    g.Proposito_sala,
-                    g.Chat_id,
-                    g.Tipo_sala,
-                    g.Id_asignatura,
-                    g.Enlace_invitacion,
-                    a.Nombre as NombreAsignatura
-                FROM Grupos_tutoria g
-                LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-                WHERE g.Id_usuario = ?
-            """, (profesor_id,))
-            
-            salas = cursor.fetchall()
+            salas = get_grupos_tutoria(Id_usuario=profesor_id)
             print(f"Encontradas {len(salas)} salas para el profesor {profesor_id}")
             
             # Clasificar las salas por asignatura
@@ -246,7 +167,7 @@ def register_handlers(bot):
                     'tipo': sala['Tipo_sala'],
                     'enlace': sala['Enlace_invitacion'],
                     'chat_id': sala['Chat_id'],
-                    'asignatura': sala['NombreAsignatura']
+                    'asignatura': sala['Asignatura']
                 }
                 
                 # Asignar la sala a su asignatura correspondiente (o a general si no tiene)
@@ -265,7 +186,6 @@ def register_handlers(bot):
                     profesores[profesor_id]['asignaturas']['general']['salas'].append(sala_data)
                     print(f"Sala '{sala['Nombre_sala']}' asignada a 'general' (sin asignatura asociada)")
 
-        conn.close()
         
         # Si no se encontró ningún profesor, mostrar mensaje y terminar
         if not profesores:
@@ -415,7 +335,7 @@ def register_handlers(bot):
             profesor_id = int(parts[3])
             
             # 1. Verificar que el usuario solicitante es un estudiante registrado
-            user = get_user_by_telegram_id(user_id)
+            user = get_usuarios(TelegramID=user_id)[0]
             if not user:
                 bot.answer_callback_query(call.id, "❌ No estás registrado en el sistema.")
                 return
@@ -424,25 +344,9 @@ def register_handlers(bot):
                 bot.answer_callback_query(call.id, "⚠️ Solo los estudiantes pueden solicitar tutorías privadas.")
                 return
             
-            # 2. Obtener información de la sala y del profesor
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT 
-                    g.*,
-                    u.Nombre as NombreProfesor,
-                    u.Apellidos as ApellidosProfesor,
-                    u.TelegramID as ProfesorTelegramID,
-                    u.Horario as HorarioProfesor,
-                    a.Nombre as NombreAsignatura
-                FROM Grupos_tutoria g
-                JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-                LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-                WHERE g.id_sala = ? AND g.Id_usuario = ?
-            """, (sala_id, profesor_id))
-            
-            sala = cursor.fetchone()
-            conn.close()
+            # 2. Obtener información de la sala y del profesor            
+            sala = get_grupos_tutoria(Id_sala=sala_id)[0]
+            profesor = get_usuarios(Id_usuario=profesor_id)[0]
             
             if not sala:
                 bot.answer_callback_query(call.id, "❌ No se encontró la sala solicitada.")
@@ -450,9 +354,9 @@ def register_handlers(bot):
                 
             # 3. Verificar si estamos en horario de tutoría del profesor
             print(f"Verificando horario de tutoría para profesor_id={profesor_id}")
-            print(f"Horario del profesor: {sala['HorarioProfesor']}")
+            print(f"Horario del profesor: {profesor['Horario']}")
             
-            es_horario_tutoria = verificar_horario_tutoria(sala['HorarioProfesor'])
+            es_horario_tutoria = verificar_horario_tutoria(profesor['Horario'])
             print(f"¿Está en horario de tutoría? {es_horario_tutoria}")
             
             if not es_horario_tutoria:
@@ -463,9 +367,9 @@ def register_handlers(bot):
                 bot.send_message(
                     chat_id,
                     f"⏰ *No es horario de tutoría*\n\n"
-                    f"El profesor {escape_markdown(sala['NombreProfesor'])} {escape_markdown(sala['ApellidosProfesor'] or '')} "
+                    f"El profesor {escape_markdown(profesor['Nombre'])} {escape_markdown(profesor['Apellidos'] or '')} "
                     f"tiene el siguiente horario de tutorías:\n\n"
-                    f"{escape_markdown(sala['HorarioProfesor'])}\n\n"
+                    f"{escape_markdown(profesor['Horario'])}\n\n"
                     f"Por favor, intenta solicitar acceso durante estos horarios.",
                     parse_mode="Markdown"
                 )
@@ -482,8 +386,8 @@ def register_handlers(bot):
                 f"📧 Email: {escape_markdown(user['Email_UGR'] or 'No disponible')}\n"
             )
             
-            if sala['NombreAsignatura']:
-                mensaje_profesor += f"📚 Asignatura: {escape_markdown(sala['NombreAsignatura'])}\n"
+            if sala['Asignatura']:
+                mensaje_profesor += f"📚 Asignatura: {escape_markdown(sala['Asignatura'])}\n"
             
             mensaje_profesor += (
                 f"\nEl estudiante ha solicitado acceso a tu sala de tutorías privadas."
@@ -502,7 +406,7 @@ def register_handlers(bot):
                 mensaje_estudiante = (
                     f"✅ *Solicitud de tutoría enviada*\n\n"
                     f"Tu solicitud ha sido enviada al profesor "
-                    f"{escape_markdown(sala['NombreProfesor'])} {escape_markdown(sala['ApellidosProfesor'] or '')}.\n\n"
+                    f"{escape_markdown(profesor['Nombre'])} {escape_markdown(profesor['Apellidos'] or '')}.\n\n"
                     f"Recibirás una notificación cuando el profesor responda a tu solicitud."
                 )
                 
@@ -522,9 +426,9 @@ def register_handlers(bot):
                 )
             
             # 6. Enviar la notificación al profesor
-            if sala['ProfesorTelegramID']:
+            if profesor['TelegramID']:
                 bot.send_message(
-                    sala['ProfesorTelegramID'],
+                    profesor['TelegramID'],
                     mensaje_profesor,
                     parse_mode="Markdown",
                     reply_markup=markup_profesor
@@ -569,69 +473,35 @@ def register_handlers(bot):
             estudiante_id = int(parts[3])
             
             # 1. Verificar que el usuario que aprueba es el profesor propietario de la sala
-            profesor = get_user_by_telegram_id(user_id)
+            profesor = get_usuarios(TelegramID=user_id)[0]
             if not profesor or profesor['Tipo'] != 'profesor':
                 bot.answer_callback_query(call.id, "⚠️ Solo el profesor propietario puede aprobar solicitudes.")
                 return
             
-            # 2. Obtener información de la sala y del estudiante
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
+            # 2. Obtener información de la sala y del estudiante       
             # Verificar que la sala pertenece al profesor
-            cursor.execute("""
-                SELECT g.*, u.Nombre as NombreProfesor, u.Apellidos as ApellidosProfesor
-                FROM Grupos_tutoria g
-                JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-                WHERE g.id_sala = ? AND g.Id_usuario = (
-                    SELECT Id_usuario FROM Usuarios WHERE TelegramID = ?
-                )
-            """, (sala_id, user_id))
-            
-            sala = cursor.fetchone()
+            sala = get_grupos_tutoria(Id_sala=sala_id, Id_usuario=profesor['Id_usuario'])[0]
             
             if not sala:
                 bot.answer_callback_query(call.id, "❌ No tienes permisos para esta sala o no existe.")
-                conn.close()
                 return
             
             # 3. Obtener información del estudiante
-            cursor.execute("""
-                SELECT * 
-                FROM Usuarios 
-                WHERE Id_usuario = ? AND Tipo = 'estudiante'
-            """, (estudiante_id,))
-            
-            estudiante = cursor.fetchone()
-            
+            estudiante = get_usuarios(Id_usuario=user_id, Tipo='estudiante')[0]
             if not estudiante:
                 bot.answer_callback_query(call.id, "❌ No se encontró al estudiante.")
-                conn.close()
                 return
             
-            # 4. Verificar si el estudiante ya es miembro de la sala
-            cursor.execute("""
-                SELECT * FROM Miembros_Grupo 
-                WHERE id_sala = ? AND Id_usuario = ?
-            """, (sala_id, estudiante_id))
-            
-            miembro_existente = cursor.fetchone()
+            # 4. Verificar si el estudiante ya es miembro de la sala      
+            miembro_existente = get_miembros_grupos(id_sala=sala_id, Id_usuario=estudiante_id)[0]
             
             if miembro_existente:
                 # Actualizar estado a activo si estaba inactivo
-                cursor.execute("""
-                    UPDATE Miembros_Grupo 
-                    SET Estado = 'activo' 
-                    WHERE id_sala = ? AND Id_usuario = ?
-                """, (sala_id, estudiante_id))
+                update_miembro_grupo(sala_id, estudiante_id, 'activo')
             else:
                 # Añadir al estudiante como miembro de la sala
-                cursor.execute("""
-                    INSERT INTO Miembros_Grupo (id_sala, Id_usuario, Estado)
-                    VALUES (?, ?, 'activo')
-                """, (sala_id, estudiante_id))
+                insert_miembro_grupo(sala_id, estudiante_id, 'activo')
         
-            conn.commit()
             
             # 5. Enviar enlace de invitación al estudiante
             if sala['Enlace_invitacion'] and estudiante['TelegramID']:
@@ -708,26 +578,16 @@ def register_handlers(bot):
             estudiante_id = int(parts[3])
             
             # Verificar que el usuario que rechaza es el profesor propietario de la sala
-            profesor = get_user_by_telegram_id(user_id)
+            profesor = get_usuarios(TelegramID=user_id)[0]
             if not profesor or profesor['Tipo'] != 'profesor':
                 bot.answer_callback_query(call.id, "⚠️ Solo el profesor propietario puede rechazar solicitudes.")
                 return
             
-            # Obtener información del estudiante y la sala
-            conn = get_db_connection()
-            cursor = conn.cursor()
+            # Obtener información del estudiante y la sala            
+            estudiante = get_usuarios(Id_usuario=estudiante_id)[0]
             
-            cursor.execute("""
-                SELECT * FROM Usuarios WHERE Id_usuario = ?
-            """, (estudiante_id,))
-            estudiante = cursor.fetchone()
+            sala = get_grupos_tutoria(Id_sala=sala_id)[0]
             
-            cursor.execute("""
-                SELECT * FROM Grupos_tutoria WHERE id_sala = ?
-            """, (sala_id,))
-            sala = cursor.fetchone()
-            
-            conn.close()
             
             if not estudiante or not sala:
                 bot.answer_callback_query(call.id, "❌ Datos de solicitud no encontrados.")
@@ -915,36 +775,17 @@ def registrar_solicitud_tutoria(estudiante_id, profesor_id, sala_id):
         profesor_id (int): ID del profesor
         sala_id (int): ID de la sala solicitada
     """
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
+    try:        
         # Verificar si ya existe un registro de este estudiante en esta sala
-        cursor.execute(
-            "SELECT id_miembro FROM Miembros_Grupo WHERE id_sala = ? AND Id_usuario = ?",
-            (sala_id, estudiante_id)
-        )
-        
-        miembro = cursor.fetchone()
+        miembro = get_miembros_grupos(id_sala=sala_id, Id_usuario=estudiante_id)[0]
         
         if miembro:
             # Si ya existe, actualizar su estado a activo si no lo está
-            cursor.execute(
-                "UPDATE Miembros_Grupo SET Estado = 'activo' WHERE id_miembro = ?",
-                (miembro['id_miembro'],)
-            )
+            update_miembro_grupo(sala_id, estudiante_id, 'activo')
         else:
             # Si no existe, crear un nuevo registro
-            cursor.execute(
-                """
-                INSERT INTO Miembros_Grupo (id_sala, Id_usuario, Estado)
-                VALUES (?, ?, 'pendiente')
-                """,
-                (sala_id, estudiante_id)
-            )
+            insert_miembro_grupo(sala_id, estudiante_id, 'pendiente')
         
-        conn.commit()
-        conn.close()
         print(f"✅ Solicitud registrada: Estudiante {estudiante_id} para sala {sala_id}")
         
     except Exception as e:

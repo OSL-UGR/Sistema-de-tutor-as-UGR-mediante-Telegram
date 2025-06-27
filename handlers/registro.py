@@ -21,13 +21,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.excel_manager import buscar_usuario_por_email, cargar_excel, verificar_email_en_excel, importar_datos_por_email
 import pandas as pd
 from db.queries import (
-    get_user_by_telegram_id, 
-    create_user, 
-    crear_matricula,  
-    get_db_connection,
-    update_user,
-    get_o_crear_carrera
+    get_usuarios, 
+    insert_usuario,
+    update_asignatura,  
+    update_usuario
 )
+from utils.db_utils import crear_o_actualizar_matricula, get_or_insert_carrera
 
 # Añadir al inicio del archivo
 from utils.state_manager import get_state, set_state, clear_state, user_data, user_states, estados_timestamp
@@ -45,7 +44,7 @@ STATE_CONFIRMAR_DATOS = "confirmando_datos_excel"
 # Configurar logger
 logger = logging.getLogger("registro")
 if not logger.handlers:
-    handler = logging.FileHandler("registro.log")
+    handler = logging.FileHandler("logs/registro.log")
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
@@ -73,8 +72,8 @@ def register_handlers(bot):
     
     def is_user_registered(chat_id):
         """Verifica si el usuario ya está registrado"""
-        user = get_user_by_telegram_id(chat_id)
-        return user is not None
+        user = get_usuarios(TelegramID=chat_id)
+        return user != []
     
     def send_verification_email(email, token):
         """Envía un correo electrónico con el token de verificación"""
@@ -146,24 +145,19 @@ def register_handlers(bot):
     
     def verificar_correo_en_bd(email):
         """Verifica si el correo existe en la tabla Usuarios de la base de datos"""
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT Id_usuario FROM Usuarios WHERE Email_UGR = ?", (email,))
-        resultado = cursor.fetchone()
-        conn.close()
+        resultado = get_usuarios(Email_UGR=email)[0]
         return resultado is not None
     
     def is_email_registered(email):
         """Verifica si el correo ya está registrado en la base de datos"""
-        # Implementar según tu estructura de base de datos
-        # Por ahora siempre devuelve False
-        return False
+        resultado = get_usuarios(Email_UGR=email)[0]
+        return resultado["Registrado"] == 'SI'
     
     def completar_registro(chat_id):
         """Completa el registro del usuario"""
         try:
             # Crear usuario
-            user_id = create_user(
+            user_id = insert_usuario(
                 nombre=user_data[chat_id]['nombre'],
                 apellidos=user_data[chat_id]['apellidos'],
                 tipo=user_data[chat_id]['tipo'],
@@ -174,33 +168,25 @@ def register_handlers(bot):
             )
             
             # Actualizar el campo carrera en la tabla usuarios
-            update_user(user_id, Carrera=user_data[chat_id].get('carrera', ''))
+            update_usuario(user_id, Carrera=user_data[chat_id].get('carrera', ''))
             
             # Obtener o crear la carrera en la tabla Carreras
-            carrera_id = get_o_crear_carrera(user_data[chat_id].get('carrera', 'General'))
+            carrera_id = get_or_insert_carrera(user_data[chat_id].get('carrera', 'General'))
             
             # Para estudiantes, crear matrículas
             if user_data[chat_id]['tipo'] == 'estudiante':
                 for asignatura_id in user_data[chat_id].get('asignaturas_seleccionadas', []):
-                    crear_matricula(user_id, asignatura_id)
+                    crear_o_actualizar_matricula(user_id, asignatura_id)
                     # Asegurarse de que la asignatura esté asociada a la carrera
-                    cursor = get_db_connection().cursor()
-                    cursor.execute("UPDATE Asignaturas SET Id_carrera = ? WHERE Id_asignatura = ? AND Id_carrera IS NULL", 
-                                  (carrera_id, asignatura_id))
-                    cursor.connection.commit()
-                    cursor.connection.close()
+                    update_asignatura(asignatura_id, Id_carrera=carrera_id)
                     
             # Para profesores, crear asignaturas impartidas
             elif user_data[chat_id]['tipo'] == 'profesor':
                 for asignatura_id in user_data[chat_id].get('asignaturas_seleccionadas', []):
-                    crear_matricula(user_id, asignatura_id, 'profesor')
+                    crear_o_actualizar_matricula(user_id, asignatura_id, 'profesor')
                     # Asegurarse de que la asignatura esté asociada a la carrera
-                    cursor = get_db_connection().cursor()
-                    cursor.execute("UPDATE Asignaturas SET Id_carrera = ? WHERE Id_asignatura = ? AND Id_carrera IS NULL", 
-                                  (carrera_id, asignatura_id))
-                    cursor.connection.commit()
-                    cursor.connection.close()
-        
+                    update_asignatura(asignatura_id, Id_carrera=carrera_id)
+                            
             # Llamar a la función para enviar mensaje de bienvenida
             tipo = user_data[chat_id]['tipo']
             handle_registration_completion(chat_id, tipo)
@@ -440,25 +426,13 @@ def register_handlers(bot):
                 
                 if email:
                     # Actualizar la base de datos: cambiar Registrado a SI y guardar el TelegramID
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "UPDATE Usuarios SET Registrado = 'SI', TelegramID = ? WHERE Email_UGR = ?", 
-                        (message.from_user.id, email)
-                    )
+                    user = get_usuarios(Email_UGR=email)[0]  # Verificar que el email existe
+                    update_usuario(user["Id_usuario"], Registrado='SI', TelegramID=message.from_user.id)
+                    logger.info(f"Usuario {email} verificado correctamente. TelegramID actualizado.")
                     
-                    # Verificar que se actualizó alguna fila
-                    if cursor.rowcount == 0:
-                        bot.send_message(chat_id, "❌ No se encontró tu correo en la base de datos.")
-                        logger.error(f"No se encontró el email {email} en la base de datos")
-                    else:
-                        conn.commit()
-                        logger.info(f"Usuario {email} verificado correctamente. TelegramID actualizado.")
+                    # Enviar mensaje de bienvenida
+                    handle_registration_completion(chat_id, tipo_usuario)
                         
-                        # Enviar mensaje de bienvenida
-                        handle_registration_completion(chat_id, tipo_usuario)
-                        
-                    conn.close()
                 else:
                     logger.error("No se encontró email en user_data para la verificación")
             except Exception as e:

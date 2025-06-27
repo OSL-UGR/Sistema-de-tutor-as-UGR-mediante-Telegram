@@ -4,14 +4,7 @@ import sys
 import time
 from datetime import datetime
 
-# Configuración de la base de datos
-DB_PATH = os.path.join(os.path.dirname(__file__), 'tutoria_ugr.db')
-
-def get_db_connection():
-    """Retorna una conexión a la base de datos"""
-    connection = sqlite3.connect(DB_PATH)
-    connection.row_factory = sqlite3.Row
-    return connection
+from db.db import commit, get_cursor
 
 def clear_screen():
     """Limpia la pantalla de la terminal"""
@@ -44,13 +37,11 @@ def main_menu():
 
 def select_student():
     """Permite seleccionar cualquier estudiante para la simulación"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor()
     
     # Seleccionamos cualquier estudiante sin importar si está en un grupo
     cursor.execute("SELECT Id_usuario, Nombre, Apellidos, Email_UGR FROM Usuarios WHERE Tipo = 'estudiante'")
     estudiantes = cursor.fetchall()
-    conn.close()
     
     if not estudiantes:
         print("❌ No hay estudiantes registrados en la base de datos.")
@@ -74,13 +65,11 @@ def select_student():
 
 def select_professor():
     """Permite seleccionar cualquier profesor para la simulación"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor()
     
     # Seleccionamos cualquier profesor
     cursor.execute("SELECT Id_usuario, Nombre, Apellidos, Email_UGR FROM Usuarios WHERE Tipo = 'profesor'")
     profesores = cursor.fetchall()
-    conn.close()
     
     if not profesores:
         print("❌ No hay profesores registrados en la base de datos.")
@@ -104,8 +93,7 @@ def select_professor():
 
 def select_group_or_create_fake(profesor_id):
     """Selecciona un grupo existente o crea uno ficticio para pruebas"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor()
     
     # Buscar grupos del profesor
     cursor.execute("""
@@ -124,7 +112,6 @@ def select_group_or_create_fake(profesor_id):
         grupos = [grupo_ficticio]
         print("\n⚠️ El profesor no tiene grupos. Usando grupo ficticio para pruebas.")
     
-    conn.close()
     
     # Si solo hay un grupo, seleccionarlo automáticamente
     if len(grupos) == 1:
@@ -200,8 +187,7 @@ def create_test_rating():
         comentario = None
     
     # 6. Guardamos la valoración en la BD
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor()
     
     try:
         # Verificar si la tabla existe
@@ -261,7 +247,7 @@ def create_test_rating():
             
             mensaje = f"✅ *Nueva valoración registrada*\n\n"
         
-        conn.commit()
+        commit()
         
         # 7. Mostrar mensaje de éxito
         mensaje += f"👤 *Estudiante:* {estudiante['Nombre']} {estudiante['Apellidos'] or ''}\n"
@@ -277,7 +263,6 @@ def create_test_rating():
     except Exception as e:
         print(f"❌ Error al guardar la valoración: {str(e)}")
     
-    conn.close()
     input("\nPresiona Enter para continuar...")
 
 def view_professor_ratings():
@@ -286,15 +271,13 @@ def view_professor_ratings():
     if not profesor:
         return
     
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor()
     
     # Verificar si la tabla existe
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Valoraciones';")
     if not cursor.fetchone():
         print("❌ La tabla Valoraciones no existe todavía.")
         input("Presiona Enter para continuar...")
-        conn.close()
         return
     
     # Obtener valoraciones del profesor
@@ -308,7 +291,6 @@ def view_professor_ratings():
     """, (profesor['Id_usuario'],))
     
     valoraciones = cursor.fetchall()
-    conn.close()
     
     clear_screen()
     if not valoraciones:
@@ -342,8 +324,7 @@ def view_professor_ratings():
 
 def verify_valoraciones_table():
     """Verifica y muestra información sobre la tabla Valoraciones"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor()
     
     clear_screen()
     print("\n===== VERIFICACIÓN DE LA TABLA VALORACIONES =====\n")
@@ -367,10 +348,9 @@ def verify_valoraciones_table():
                     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
-            conn.commit()
+            commit()
             print("\n✅ Tabla Valoraciones creada correctamente.")
         else:
-            conn.close()
             input("\nPresiona Enter para continuar...")
             return
     
@@ -416,7 +396,6 @@ def verify_valoraciones_table():
             print(f"  💬 Comentario: {v['comentario'] or '(Sin comentario)'}")
             print(f"  📅 Fecha: {v['fecha']}")
     
-    conn.close()
     input("\nPresiona Enter para continuar...")
 
 def main():
@@ -437,10 +416,5 @@ def main():
             print("\n❌ Opción inválida. Por favor, intenta de nuevo.")
             time.sleep(1)
 
-if __name__ == "__main__":
-    # Verificar que existe la base de datos
-    if not os.path.exists(DB_PATH):
-        print(f"❌ Error: Base de datos no encontrada en {DB_PATH}")
-        sys.exit(1)
-        
+if __name__ == "__main__":      
     main()

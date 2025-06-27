@@ -1,19 +1,13 @@
-import sqlite3
-import os
 from pathlib import Path
+
+from db.db import commit, get_cursor
 
 # Ruta de la nueva base de datos
 DB_PATH = Path(__file__).parent.parent / "tutoria_ugr.db"
 
-def get_db_connection():
-    """Obtiene una conexión a la base de datos"""
-
-    return sqlite3.connect(str(DB_PATH))
-
 def create_database():
     """Crea la estructura completa de la base de datos"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor()
     
     cursor.executescript('''
     -- Tabla de Usuarios
@@ -109,41 +103,10 @@ def create_database():
     );
     ''')
     
-    conn.commit()
-    conn.close()
+    commit()
     print(f"✅ Base de datos creada exitosamente en: {DB_PATH}")
     print("   Estructura de base de datos lista para cargar datos del Excel")
-
-def actualizar_estructura_tablas():
-    """Actualiza la estructura de las tablas existentes según sea necesario"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Verificar y actualizar Grupos_tutoria
-    try:
-        cursor.execute("SELECT Proposito_sala FROM Grupos_tutoria LIMIT 1")
-    except:
-        print("Actualizando Grupos_tutoria: añadiendo columna Proposito_sala")
-        cursor.execute("ALTER TABLE Grupos_tutoria ADD COLUMN Proposito_sala TEXT")
-    
-    try:
-        cursor.execute("SELECT Fecha_creacion FROM Grupos_tutoria LIMIT 1")
-    except:
-        print("Actualizando Grupos_tutoria: añadiendo columna Fecha_creacion")
-        cursor.execute("ALTER TABLE Grupos_tutoria ADD COLUMN Fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-    
-    # Verificar y actualizar Valoraciones
-    try:
-        cursor.execute("SELECT id_sala FROM Valoraciones LIMIT 1")
-    except:
-        print("Actualizando Valoraciones: añadiendo columna id_sala")
-        cursor.execute("ALTER TABLE Valoraciones ADD COLUMN id_sala INTEGER")
-    
-    conn.commit()
-    conn.close()
-    print("✅ Estructura de tablas actualizada correctamente")
 
 # Agregar esto al bloque principal para que se ejecute al iniciar
 if __name__ == "__main__":
     create_database()
-    actualizar_estructura_tablas()

@@ -1,12 +1,10 @@
 import sys
 import os
+from db.queries import get_asignaturas, get_grupos_tutoria, get_grupos_tutoria, get_matriculas, get_usuarios, insert_grupo_tutoria, delete_grupo_tutoria, update_grupo_tutoria
 # Añadir el directorio raíz al path para importar desde db
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from db.queries import get_db_connection
 
 import time
-import sqlite3
-import traceback
 from telebot import types
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ChatMemberHandler
@@ -31,46 +29,19 @@ class GestionGrupos:
     def __init__(self, db_path: str):
         self.db_path = db_path
         self.logger = logging.getLogger(__name__)
-    
-    def obtener_asignaturas_profesor(self, id_profesor: int):
-        """Obtiene las asignaturas que imparte un profesor"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT a.id, a.nombre
-            FROM asignaturas a
-            JOIN profesor_asignatura pa ON a.id = pa.id_asignatura
-            WHERE pa.id_profesor = ?
-        ''', (id_profesor,))
-        
-        asignaturas = cursor.fetchall()
-        conn.close()
-        return asignaturas
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', filename='logs/grupo_handlers.log', filemode='w')  
     
     def guardar_grupo(self, nombre_grupo: str, enlace_grupo: str, id_profesor: int, 
                       id_asignatura: int = None, es_tutoria: bool = False):
         """Guarda la información del grupo en la base de datos"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
+        try:            
             # Determinar el tipo de sala según es_tutoria
             tipo_sala = 'privada' if es_tutoria else 'pública'
             
             # Extraer el chat_id del enlace o usar un valor único
             chat_id = enlace_grupo.split('/')[-1] if '/' in enlace_grupo else enlace_grupo
             
-            cursor.execute('''
-                INSERT INTO Grupos_tutoria (
-                    Id_usuario, Nombre_sala, Tipo_sala, Id_asignatura, 
-                    Chat_id, Enlace_invitacion
-                ) VALUES (?, ?, ?, ?, ?, ?)
-            ''', (id_profesor, nombre_grupo, tipo_sala, id_asignatura, chat_id, enlace_grupo))
-            
-            inserted_id = cursor.lastrowid
-            conn.commit()
-            conn.close()
+            inserted_id = insert_grupo_tutoria(id_profesor, nombre_grupo, tipo_sala, id_asignatura, chat_id, enlace_grupo)
             
             self.logger.info(f"Grupo guardado exitosamente: ID={inserted_id}, Nombre='{nombre_grupo}', " 
                              f"Profesor ID={id_profesor}, Asignatura ID={id_asignatura}, Es tutoria={es_tutoria}")
@@ -87,29 +58,11 @@ class GestionGrupos:
         - Lista de IDs de asignaturas con sala ya creada
         - Booleano indicando si ya tiene sala de tutorías
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
         
-        # Verificar salas por asignatura
-        cursor.execute('''
-            SELECT Id_asignatura 
-            FROM Grupos_tutoria 
-            WHERE Id_usuario = ? AND Tipo_sala = 'pública' AND Id_asignatura IS NOT NULL
-        ''', (id_profesor,))
+        asignaturas_con_sala = [row["Id_asignatura"] for row in get_grupos_tutoria(profesor_id=id_profesor, tipo_sala="publica")]
         
-        asignaturas_con_sala = [row[0] for row in cursor.fetchall()]
-        
-        # Verificar si tiene sala de tutorías
-        cursor.execute('''
-            SELECT COUNT(*) 
-            FROM Grupos_tutoria 
-            WHERE Id_usuario = ? AND Tipo_sala = 'privada'
-        ''', (id_profesor,))
-        
-        tiene_sala_tutoria = cursor.fetchone()[0] > 0
-        
-        conn.close()
-        
+        tiene_sala_tutoria = get_grupos_tutoria(profesor_id=id_profesor, tipo_sala="privada")[0] is not None
+                
         return {
             'asignaturas_con_sala': asignaturas_con_sala,
             'tiene_sala_tutoria': tiene_sala_tutoria
@@ -137,15 +90,11 @@ class GestionGrupos:
             query.edit_message_text(f"El grupo '{nombre_grupo}' ha sido configurado como tu sala de tutorías individuales.")
         else:
             # Es una sala de asignatura
-            id_asignatura = int(eleccion.split('_')[1])
-            self.guardar_grupo(nombre_grupo, enlace_grupo, id_profesor, id_asignatura, False)
+            asignatura_id = int(eleccion.split('_')[1])
+            self.guardar_grupo(nombre_grupo, enlace_grupo, id_profesor, asignatura_id, False)
             
             # Obtener nombre de la asignatura
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT nombre FROM asignaturas WHERE id = ?", (id_asignatura,))
-            nombre_asignatura = cursor.fetchone()[0]
-            conn.close()
+            nombre_asignatura = get_asignaturas(Id_asignatura=asignatura_id)[0]["Nombre"]
             
             query.edit_message_text(
                 f"El grupo '{nombre_grupo}' ha sido asociado a la asignatura '{nombre_asignatura}'.\n\n"
@@ -154,30 +103,16 @@ class GestionGrupos:
         
         return ConversationHandler.END
     
-    def es_sala_tutoria(self, chat_id):
+    def es_sala_tutoria(self, id_chat):
         """Verifica si un chat es una sala de tutoría"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
         
-        cursor.execute('''
-            SELECT Tipo_sala FROM Grupos_tutoria
-            WHERE Chat_id LIKE ?
-        ''', (f"%{chat_id}%",))
-        
-        result = cursor.fetchone()
-        conn.close()
+        result = get_grupos_tutoria(Chat_id=id_chat)[0]["Tipo_sala"]
         
         return result and result[0] == 'privada'
     
     def es_profesor(self, user_id):
         """Verifica si un usuario es profesor"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Cambiado de 'rol' a 'Tipo' para ser consistente con el resto del código
-        cursor.execute('SELECT Tipo FROM Usuarios WHERE Telegram_id = ?', (user_id,))
-        result = cursor.fetchone()
-        conn.close()
+        result = get_usuarios(TelegramID=user_id)[0]["Tipo"]
         
         return result and result[0] == 'profesor'
     
@@ -438,30 +373,20 @@ class GestionGrupos:
             update.message.reply_text("Solo los profesores pueden usar esta función.")
             return ConversationHandler.END
         
-        # Obtener salas del profesor
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT g.id_sala, g.Nombre_sala, a.nombre, g.Id_asignatura
-            FROM Grupos_tutoria g
-            LEFT JOIN asignaturas a ON g.Id_asignatura = a.id
-            WHERE g.Id_usuario = ? AND g.Tipo_sala = 'pública'
-        ''', (user_id,))
-        
-        salas = cursor.fetchall()
-        conn.close()
-        
+        # Obtener salas del profesor     
+        salas = get_grupos_tutoria(Id_usuario = user_id, tipo_sala="pública")
+
         if not salas:
             update.message.reply_text("No tienes salas de asignatura configuradas.")
             return ConversationHandler.END
         
         # Mostrar lista de salas para seleccionar
         keyboard = []
-        for sala_id, nombre_sala, nombre_asig, _ in salas:
+        for sala in salas:
             keyboard.append([
                 InlineKeyboardButton(
-                    f"{nombre_sala} - {nombre_asig or 'Sin asignatura'}", 
-                    callback_data=f"sala_{sala_id}"
+                    f"{sala["Nombre_Sala"]} - {sala["Asignatura"] or 'Sin asignatura'}", 
+                    callback_data=f"sala_{sala['id_sala']}"
                 )
             ])
         
@@ -487,22 +412,8 @@ class GestionGrupos:
             update.message.reply_text("Solo los profesores pueden usar esta función.")
             return ConversationHandler.END
         
-        # Obtener salas del profesor
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT g.id_sala, g.Nombre_sala, 
-                   CASE 
-                       WHEN g.Tipo_sala = 'privada' THEN 'Sala de Tutorías'
-                       ELSE a.nombre 
-                   END as tipo_o_asignatura
-            FROM Grupos_tutoria g
-            LEFT JOIN asignaturas a ON g.Id_asignatura = a.id
-            WHERE g.Id_usuario = ?
-        ''', (user_id,))
-        
-        salas = cursor.fetchall()
-        conn.close()
+        # Obtener salas del profesor        
+        salas = get_grupos_tutoria(Id_usuario=user_id)
         
         if not salas:
             update.message.reply_text("No tienes salas configuradas.")
@@ -510,13 +421,21 @@ class GestionGrupos:
         
         # Mostrar lista de salas para eliminar
         keyboard = []
-        for sala_id, nombre_sala, tipo_o_asig in salas:
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"{nombre_sala} - {tipo_o_asig}", 
-                    callback_data=f"eliminar_{sala_id}"
-                )
-            ])
+        for sala in salas:
+            if (sala["Tipo_sala"] == "privada"):
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"{salas["Nombre_sala"]} - {'Sala de Tutorías'}", 
+                        callback_data=f"eliminar_{sala['id_sala']}"
+                    )
+                ])
+            else:
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"{sala['Nombre_sala']} - {sala['Asignatura'] or 'Sin asignatura'}", 
+                        callback_data=f"eliminar_{sala['id_sala']}"
+                    )
+                ])
         
         keyboard.append([InlineKeyboardButton("Cancelar", callback_data="cancelar")])
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -556,13 +475,14 @@ class GestionGrupos:
         
         # Obtener asignaturas disponibles para el profesor
         user_id = update.effective_user.id
-        asignaturas = self.obtener_asignaturas_profesor(user_id)
+        asignaturas = get_matriculas(Id_usuario=user_id)
         
         # Crear teclado con opciones de asignaturas
         keyboard = []
-        for id_asig, nombre_asig in asignaturas:
+        for asig in asignaturas:
+            id_asig = asig["Id_asignatura"]
             if id_asig != sala_info[3]:  # No mostrar la asignatura actual
-                keyboard.append([InlineKeyboardButton(nombre_asig, callback_data=f"asignar_{id_asig}")])        
+                keyboard.append([InlineKeyboardButton(asig["Asignatura"], callback_data=f"asignar_{id_asig}")])        
         keyboard.append([InlineKeyboardButton("Cancelar", callback_data="cancelar")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -588,11 +508,7 @@ class GestionGrupos:
         nueva_asignatura_id = int(query.data.split('_')[1])
         
         # Obtener nombre de la asignatura
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT nombre FROM asignaturas WHERE id = ?", (nueva_asignatura_id,))
-        nombre_asignatura = cursor.fetchone()[0]
-        conn.close()
+        nombre_asignatura = get_asignaturas(Id_asignatura=nueva_asignatura_id)[0]["Nombre"]
         
         # Guardar en el contexto
         context.user_data['nueva_asignatura'] = {
@@ -628,29 +544,17 @@ class GestionGrupos:
         sala_nombre = context.user_data['sala_actual']['nombre']
         nueva_asignatura_nombre = context.user_data['nueva_asignatura']['nombre']
         
-        # Actualizar la asignatura en la base de datos
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
+        # Actualizar la asignatura en la base de datos        
         try:
             # Obtener el chat_id de la sala
-            cursor.execute("SELECT Chat_id FROM Grupos_tutoria WHERE id_sala = ?", (sala_id,))
-            chat_id_result = cursor.fetchone()
+            chat_id = get_grupos_tutoria(id_sala=sala_id)[0]["Chat_id"]
             
-            if not chat_id_result:
+            if not chat_id:
                 query.edit_message_text("No se encontró la sala en la base de datos.")
-                conn.close()
                 return ConversationHandler.END
-                
-            chat_id = chat_id_result[0]
             
             # Actualizar la asignatura
-            cursor.execute(
-                "UPDATE Grupos_tutoria SET Id_asignatura = ? WHERE id_sala = ?", 
-                (nueva_asignatura_id, sala_id)
-            )
-            conn.commit()
-            conn.close()
+            update_grupo_tutoria(sala_id, Id_asignatura=nueva_asignatura_id)
             
             # Si se solicitó expulsar miembros, hacerlo
             if expulsar_miembros:
@@ -670,8 +574,6 @@ class GestionGrupos:
         except Exception as e:
             self.logger.error(f"Error al cambiar asignatura: {e}")
             query.edit_message_text("Ocurrió un error al cambiar la asignatura de la sala.")
-            if 'conn' in locals() and conn:
-                conn.close()
     
         return ConversationHandler.END
 
@@ -734,30 +636,20 @@ class GestionGrupos:
         # Obtener ID de la sala
         sala_id = int(query.data.split('_')[1])
         
-        # Obtener información de la sala
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
+        # Obtener información de la sala        
         try:
-            cursor.execute('''
-                SELECT g.Nombre_sala, g.Chat_id,
-                       CASE 
-                           WHEN g.Tipo_sala = 'privada' THEN 'Sala de Tutorías'
-                           ELSE a.nombre 
-                       END as tipo_o_asignatura
-                FROM Grupos_tutoria g
-                LEFT JOIN asignaturas a ON g.Id_asignatura = a.id
-                WHERE g.id_sala = ?
-            ''', (sala_id,))
-            
-            sala_info = cursor.fetchone()
+            sala_info = get_grupos_tutoria(id_sala=sala_id)[0]
             
             if not sala_info:
                 query.edit_message_text("No se encontró información sobre la sala seleccionada.")
-                conn.close()
                 return ConversationHandler.END
             
-            nombre_sala, chat_id, tipo_sala = sala_info
+            nombre_sala = sala_info["Nombre_sala"]  # Nombre de la sala
+            chat_id = sala_info["Chat_id"]  # ID del chat del grupo
+            if sala_info["Tipo_sala"] == "privada":
+                tipo_sala = "Sala de Tutorías"
+            else:   
+                tipo_sala = sala_info["Asignatura"] if sala_info["Asignatura"] else "Sin asignatura"
             
             # Preguntar si quiere expulsar a todos los miembros
             keyboard = [
@@ -786,8 +678,6 @@ class GestionGrupos:
         except Exception as e:
             self.logger.error(f"Error al preparar eliminación de sala: {e}")
             query.edit_message_text("Ocurrió un error al procesar la solicitud.")
-            if 'conn' in locals() and conn:
-                conn.close()
             return ConversationHandler.END
 
     
@@ -813,14 +703,11 @@ class GestionGrupos:
         expulsar_miembros = (accion == "expulsar")
         
         # Eliminar sala de la base de datos
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        
         
         try:
             # Eliminar de la BD
-            cursor.execute("DELETE FROM Grupos_tutoria WHERE id_sala = ?", (sala_id,))
-            conn.commit()
-            conn.close()
+            delete_grupo_tutoria(sala_id)
             
             # Si se solicitó expulsar miembros, hacerlo
             if expulsar_miembros and sala_info['chat_id']:
@@ -840,8 +727,6 @@ class GestionGrupos:
         except Exception as e:
             self.logger.error(f"Error al eliminar sala: {e}")
             query.edit_message_text("Ocurrió un error al eliminar la sala.")
-            if 'conn' in locals() and conn:
-                conn.close()
         
         return ConversationHandler.END
 
