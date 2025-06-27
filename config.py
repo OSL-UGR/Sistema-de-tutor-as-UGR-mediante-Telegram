@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 # Obtener ruta absoluta al directorio del proyecto
 BASE_DIR = pathlib.Path(__file__).parent.absolute()
-ENV_PATH = BASE_DIR / "datos.env.txt"
+ENV_PATH = BASE_DIR / "datos.env"
 EXCEL_PATH = BASE_DIR / "data" / "usuarios.xlsx"
 
 # Cargar variables de entorno
@@ -15,8 +15,8 @@ load_dotenv(dotenv_path=ENV_PATH)
 DB_PATH = BASE_DIR / "tutoria_ugr.db"
 
 # Configuración del bot
-TOKEN = os.getenv("BOT_TOKEN", "TU_TOKEN_AQUI")
-TOKEN_GRUPO = os.getenv("TOKEN_GRUPO", "tu_token_del_bot_para_grupos_aquí")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "TU_TOKEN_AQUI")
+BOT_TOKEN_GRUPO = os.getenv("BOT_TOKEN_GRUPO", "tu_token_del_bot_para_grupos_aquí")
 
 # Configuración de email
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")

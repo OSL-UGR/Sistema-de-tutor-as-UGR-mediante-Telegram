@@ -38,14 +38,11 @@ else:
     logger.warning("No se encontró archivo de variables específico")
 
 # Estandarizar el nombre del token
-BOT_TOKEN = os.getenv("TOKEN_GRUPO")
-if not BOT_TOKEN:
-    logger.warning("TOKEN_GRUPO no encontrado, buscando TOKEN_1 como alternativa")
-    BOT_TOKEN = os.getenv("TOKEN_1")
+BOT_TOKEN = os.getenv("BOT_TOKEN_GRUPO")
     
 if not BOT_TOKEN:
     logger.critical("Token del bot de grupos no encontrado")
-    print("El token del bot de grupos no está configurado. Añade TOKEN_GRUPO en datos.env.txt")
+    print("El token del bot de grupos no está configurado. Añade BOT_TOKEN_GRUPO en datos.env.txt")
     sys.exit(1)
 
 from telebot import apihelper

@@ -5,7 +5,7 @@ import threading
 from telebot import types
 import os
 import sys
-from config import TOKEN, DB_PATH
+from config import BOT_TOKEN, DB_PATH
 
 """
 Paquete de handlers para el bot de tutorías UGR.

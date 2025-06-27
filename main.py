@@ -4,7 +4,7 @@ import threading
 from telebot import types
 import os
 import sys
-from config import TOKEN, DB_PATH,EXCEL_PATH
+from config import BOT_TOKEN, DB_PATH,EXCEL_PATH
 
 # Importar funciones para manejar estados
 from db.db import close_connection, commit
@@ -14,7 +14,7 @@ from utils.state_manager import get_state, set_state, clear_state, user_states, 
 from utils.excel_manager import cargar_excel, importar_datos_desde_excel
 # Reemplaza todos los handlers universales por este ÚNICO handler al final
 # Inicializar el bot de Telegram
-bot = telebot.TeleBot(TOKEN) 
+bot = telebot.TeleBot(BOT_TOKEN) 
 
 def escape_markdown(text):
     """Escapa caracteres especiales de Markdown"""
