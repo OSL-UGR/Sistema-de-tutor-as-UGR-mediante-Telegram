@@ -35,7 +35,7 @@ def register_student_handlers(bot):
     print("==================================================\n")
     
     # Importar la función correcta desde utils
-    from grupo_handlers.utils import menu_estudiante, menu_profesor
+    from handlers_grupo.utils import menu_estudiante, menu_profesor
     
     # ID del bot para comparaciones
     global BOT_ID

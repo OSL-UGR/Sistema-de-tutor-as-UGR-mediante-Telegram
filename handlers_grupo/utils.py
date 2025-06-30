@@ -79,7 +79,8 @@ def configurar_comandos_por_rol():
     # Comandos para profesores
     comandos_profesor = [
         types.BotCommand('/start', 'Iniciar el bot'),
-        types.BotCommand('/ayuda', 'Mostrar ayuda del bot'),
+        types.BotCommand('/configurar_grupo', 'Configuración inicial del grupo'),
+        types.BotCommand('/help', 'Mostrar ayuda del bot'),
         types.BotCommand('/estudiantes', 'Ver lista de estudiantes'),
         types.BotCommand('/estadisticas', 'Ver estadísticas de tutorías'),
         types.BotCommand('/finalizar', 'Finalizar una sesión de tutoría'),
@@ -90,11 +91,11 @@ def configurar_comandos_por_rol():
     # Comandos para estudiantes
     comandos_estudiante = [
         types.BotCommand('/start', 'Iniciar el bot'),
-        types.BotCommand('/ayuda', 'Mostrar ayuda del bot'),
+        types.BotCommand('/help', 'Mostrar ayuda del bot'),
         types.BotCommand('/finalizar', 'Finalizar una sesión de tutoría')
     ]
     
-    return comandos_profesor, comandos_estudiante
+    return (comandos_profesor, comandos_estudiante)
 
 # Funciones de verificación y estado
 def es_profesor(user_id):

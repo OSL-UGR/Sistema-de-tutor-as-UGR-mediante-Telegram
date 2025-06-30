@@ -83,7 +83,7 @@ def get_usuarios(**kwargs):
             query += f" AND {k} = ?"
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()))
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
         logging.getLogger('db.queries').error(f"Error al obtener usuario(s): {e}")
         rollback()
@@ -173,74 +173,9 @@ def get_asignaturas(**kwargs):
             query += f" AND {k} = ?"
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()))
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
         logging.getLogger('db.queries').error(f"Error al obtener asignatura(s): {e}")
-        rollback()
-        return None
-
-
-
-##=====================
-## ===== Carreras =====
-##=====================
-
-def insert_carrera(nombre_carrera, do_commit=True):
-    cursor = get_cursor()
-    try:
-        cursor.execute("INSERT INTO Carreras (Nombre_carrera) VALUES (?)", (nombre_carrera,))
-        if do_commit:
-            commit()
-        return cursor.lastrowid
-    except Exception as e:
-        print(f"Error al crear carrera: {e}")
-        rollback()
-        return None
-    
-def update_carrera(carrera_id, do_commit=True, **kwargs):
-    """Actualiza los datos de una carrera existente"""
-    allowed_fields = {"Nombre_carrera"}
-    if not all(k in allowed_fields for k in kwargs):
-        raise ValueError("Campo inválido en la actualización de carrera")
-
-    try:
-        query = "UPDATE Carreras SET "
-        query += ", ".join([f"{k} = ?" for k in kwargs])
-        query += " WHERE id_carrera = ?"
-
-        cursor = get_cursor()
-        cursor.execute(query, list(kwargs.values()) + [carrera_id])
-        if do_commit:
-            commit()
-        return cursor.rowcount > 0
-    except Exception as e:
-        logging.getLogger('db.queries').error(f"Error al actualizar carrera: {e}")
-        rollback()
-        return False
-
-def delete_carrera(carrera_id):
-    cursor = get_cursor()
-    try:
-        cursor.execute("DELETE FROM Carreras WHERE id_carrera = ?", (carrera_id,))
-        commit()
-    except Exception as e:
-        print(f"Error al eliminar carrera: {e}")
-        rollback()
-
-def get_carreras(**kwargs):
-    allowed_fields = {"id_carrera", "Nombre_carrera"}
-    try:
-        if not all(k in allowed_fields for k in kwargs):
-            raise ValueError("Campo inválido en búsqueda de Carreras")
-
-        query = "SELECT * FROM Carreras WHERE 1=1"
-        for k in kwargs:
-            query += f" AND {k} = ?"
-        cursor = get_cursor()
-        cursor.execute(query, list(kwargs.values()))
-        return cursor.fetchall()
-    except Exception as e:
-        logging.getLogger('db.queries').error(f"Error al obtener carrera(s): {e}")
         rollback()
         return None
 
@@ -316,7 +251,7 @@ def get_grupos_tutoria(**kwargs):
 
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()))
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
         logging.getLogger('db.queries').error(f"Error al obtener grupo de tutoría: {e}")
         rollback()
@@ -410,7 +345,7 @@ def get_horarios(**kwargs):
             query += f" AND {k} = ?"
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()))
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
         logging.getLogger('db.queries').error(f"Error al obtener horario de profesor: {e}")
         rollback()
@@ -483,7 +418,7 @@ def get_matriculas(**kwargs):
             query += f" AND m.{k} = ?"
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()))
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
         logging.getLogger('db.queries').error(f"Error al obtener matrícula(s): {e}")
         rollback()
@@ -559,7 +494,7 @@ def get_miembros_grupos(**kwargs):
             query += f" AND {k} = ?"
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()))
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
         logging.getLogger('db.queries').error(f"Error al obtener miembro(s) del grupo: {e}")
         rollback()
@@ -632,7 +567,7 @@ def get_valoraciones(**kwargs):
             query += f" AND {k} = ?"
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()))
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
         logging.getLogger('db.queries').error(f"Error al obtener valoración(es): {e}")
         rollback()

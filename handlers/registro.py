@@ -11,6 +11,8 @@ from email.message import EmailMessage
 import smtplib
 from pathlib import Path
 
+from handlers.horarios import set_state
+
 # Añadir directorio raíz al path para resolver importaciones
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -18,18 +20,14 @@ sys.path.append(str(Path(__file__).parent.parent))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Importar módulos necesarios
-from utils.excel_manager import buscar_usuario_por_email, cargar_excel, verificar_email_en_excel, importar_datos_por_email
-import pandas as pd
 from db.queries import (
     get_usuarios, 
     insert_usuario,
     update_asignatura,  
     update_usuario
 )
-from utils.db_utils import crear_o_actualizar_matricula, get_or_insert_carrera
-
 # Añadir al inicio del archivo
-from utils.state_manager import get_state, set_state, clear_state, user_data, user_states, estados_timestamp
+from utils.state_manager import get_state, clear_state, user_data, user_states, estados_timestamp
 
 # Variables para seguridad de token
 token_intentos_fallidos = {}  # {chat_id: número de intentos}
@@ -56,25 +54,14 @@ def register_handlers(bot):
     def handle_registration_completion(chat_id, tipo_usuario):
         """Envía mensaje de bienvenida según tipo de usuario"""
         try:
-            # Importar aquí para evitar importación circular
-            from main import enviar_mensaje_bienvenida
-            enviar_mensaje_bienvenida(chat_id, tipo_usuario)
-        except Exception as e:
-            logger.error(f"Error al enviar mensaje de bienvenida: {e}")
             bot.send_message(
                 chat_id, 
                 "¡Bienvenido al sistema de tutorías! Usa /help para ver los comandos disponibles."
             )
-    
-    def reset_user(chat_id):
-        """Reinicia el estado y datos del usuario"""
-        clear_state(chat_id)
-    
-    def is_user_registered(chat_id):
-        """Verifica si el usuario ya está registrado"""
-        user = get_usuarios(TelegramID=chat_id)
-        return user != []
-    
+        except Exception as e:
+            logger.error(f"Error al enviar mensaje de bienvenida: {e}")
+            
+
     def send_verification_email(email, token):
         """Envía un correo electrónico con el token de verificación"""
         # Cargar credenciales sin valores predeterminados para datos sensibles
@@ -142,98 +129,6 @@ def register_handlers(bot):
         """Verifica si el correo es válido (institucional UGR)"""
         #return re.match(r'.+@(correo\.)?ugr\.es$', email) is not None
         return re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', email) is not None
-    
-    def verificar_correo_en_bd(email):
-        """Verifica si el correo existe en la tabla Usuarios de la base de datos"""
-        resultado = get_usuarios(Email_UGR=email)[0]
-        return resultado is not None
-    
-    def is_email_registered(email):
-        """Verifica si el correo ya está registrado en la base de datos"""
-        resultado = get_usuarios(Email_UGR=email)[0]
-        return resultado["Registrado"] == 'SI'
-    
-    def completar_registro(chat_id):
-        """Completa el registro del usuario"""
-        try:
-            # Crear usuario
-            user_id = insert_usuario(
-                nombre=user_data[chat_id]['nombre'],
-                apellidos=user_data[chat_id]['apellidos'],
-                tipo=user_data[chat_id]['tipo'],
-                email=user_data[chat_id]['email'],
-                telegram_id=chat_id,
-                dni=user_data[chat_id].get('dni', ''),
-                carrera=user_data[chat_id].get('carrera', '')
-            )
-            
-            # Actualizar el campo carrera en la tabla usuarios
-            update_usuario(user_id, Carrera=user_data[chat_id].get('carrera', ''))
-            
-            # Obtener o crear la carrera en la tabla Carreras
-            carrera_id = get_or_insert_carrera(user_data[chat_id].get('carrera', 'General'))
-            
-            # Para estudiantes, crear matrículas
-            if user_data[chat_id]['tipo'] == 'estudiante':
-                for asignatura_id in user_data[chat_id].get('asignaturas_seleccionadas', []):
-                    crear_o_actualizar_matricula(user_id, asignatura_id)
-                    # Asegurarse de que la asignatura esté asociada a la carrera
-                    update_asignatura(asignatura_id, Id_carrera=carrera_id)
-                    
-            # Para profesores, crear asignaturas impartidas
-            elif user_data[chat_id]['tipo'] == 'profesor':
-                for asignatura_id in user_data[chat_id].get('asignaturas_seleccionadas', []):
-                    crear_o_actualizar_matricula(user_id, asignatura_id, 'profesor')
-                    # Asegurarse de que la asignatura esté asociada a la carrera
-                    update_asignatura(asignatura_id, Id_carrera=carrera_id)
-                            
-            # Llamar a la función para enviar mensaje de bienvenida
-            tipo = user_data[chat_id]['tipo']
-            handle_registration_completion(chat_id, tipo)
-            
-            return True
-        except Exception as e:
-            logger.error(f"Error al completar registro: {e}")
-            bot.send_message(chat_id, "❌ Error al completar el registro. Por favor, intenta de nuevo con /start.")
-            return False
-
-    def solicitar_carrera(chat_id):
-        """Solicita al estudiante que seleccione su carrera"""
-        markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-        # Agregar carreras comunes como opciones rápidas
-        markup.add("Ingeniería Informática", "Matemáticas")
-        markup.add("Física", "Química")
-        markup.add("Medicina", "Enfermería")
-        markup.add("Derecho", "Economía")
-        markup.add("Otra")
-        
-        bot.send_message(
-            chat_id,
-            "📚 Por favor, indica la carrera que estás cursando:",
-            reply_markup=markup
-        )
-        
-        # Establecer el estado para manejar la respuesta
-        user_states[chat_id] = "esperando_carrera"
-        estados_timestamp[chat_id] = time.time()
-    
-    @bot.message_handler(func=lambda message: user_states.get(message.chat.id) == "esperando_carrera")
-    def handle_carrera(message):
-        """Procesa la selección de carrera del estudiante"""
-        chat_id = message.chat.id
-        carrera = message.text.strip()
-        
-        # Guardar la carrera seleccionada
-        user_data[chat_id]['carrera'] = carrera
-        
-        bot.send_message(
-            chat_id,
-            f"✅ Has seleccionado: {carrera}\n\nCompletando registro...",
-            reply_markup=telebot.types.ReplyKeyboardRemove()
-        )
-        
-        # Continuar con el proceso de registro
-        completar_registro(chat_id)
         
     @bot.message_handler(commands=["start"])
     def handle_start(message):
@@ -241,7 +136,7 @@ def register_handlers(bot):
         chat_id = message.chat.id
 
         # Verifica si el usuario ya está registrado
-        if is_user_registered(chat_id):
+        if get_usuarios(TelegramID=chat_id) != []:
             bot.send_message(chat_id, "Ya estás registrado. Puedes usar las funcionalidades disponibles.")
             clear_state(chat_id)
             return
@@ -258,7 +153,7 @@ def register_handlers(bot):
             "• Profesores: usuario@ugr.es",
             parse_mode="Markdown"
         )
-        user_states[chat_id] = STATE_EMAIL
+        set_state(chat_id, STATE_EMAIL)
         user_data[chat_id] = {}  # Reinicia los datos del usuario
         estados_timestamp[chat_id] = time.time()
 
@@ -298,7 +193,7 @@ def register_handlers(bot):
             return
         
         # 2. Verificar si el correo existe en la tabla Usuarios
-        if not verificar_correo_en_bd(email):
+        if get_usuarios(Email_UGR=email)[0] is None:
             bot.send_message(
                 chat_id, 
                 "❌ *Correo no encontrado*\n\n"
@@ -307,9 +202,9 @@ def register_handlers(bot):
                 parse_mode="Markdown"
             )
             return
-        
+
         # 3. Verificar si el correo ya está registrado con un Telegram ID
-        if is_email_registered(email):
+        if get_usuarios(Email_UGR=email)[0]["Registrado"] == 'SI':
             bot.send_message(
                 chat_id, 
                 "⚠️ Este correo ya está registrado. Si ya tienes cuenta, usa los comandos disponibles.\n"
@@ -346,8 +241,7 @@ def register_handlers(bot):
                 parse_mode="Markdown",
                 reply_markup=markup
             )
-            user_states[chat_id] = STATE_VERIFY_TOKEN
-            estados_timestamp[chat_id] = time.time()
+            set_state(chat_id, STATE_VERIFY_TOKEN)
         else:
             bot.send_message(
                 chat_id, 
@@ -377,8 +271,6 @@ def register_handlers(bot):
             mensaje = (
                 f"📚 *Comandos disponibles:*\n"
                 f"• /help - Ver todos los comandos disponibles\n"
-                f"• /profesores - Ver profesores de tus asignaturas\n"
-                f"• /horarios - Ver horarios de tutorías"
             )
         else:  # Si es profesor
             mensaje = (
@@ -387,10 +279,8 @@ def register_handlers(bot):
                 f"Utiliza el comando /crear_grupo para configurar tus grupos.\n\n"
                 f"📚 *Otros comandos disponibles:*\n"
                 f"• /help - Ver todos los comandos disponibles\n"
-                f"• /configurar_horario - Modificar tu horario de tutorías\n"
-                f"• /mis_tutorias - Ver tus grupos de tutoría activos"
             )
-        
+
         bot.send_message(
             chat_id,
             mensaje,
@@ -462,16 +352,12 @@ def register_handlers(bot):
             mensaje = (
                 f"📚 *Comandos disponibles:*\n"
                 f"• /help - Ver todos los comandos disponibles\n"
-                f"• /profesores - Ver profesores de tus asignaturas\n"
-                f"• /horarios - Ver horarios de tutorías"
             )
         else:  # Si es profesor
             mensaje = (
                 f"🔔 *Tu próximo paso:*\n"
                 f"Debes configurar tu horario de tutorías y crear grupos para tus asignaturas.\n\n"
                 f"📚 *Comandos disponibles:*\n"
-                f"• /configurar_horario - Establecer tu horario de tutorías\n"
-                f"• /crear_grupo_tutoria - Crear grupos para tus asignaturas\n"
                 f"• /help - Ver todos los comandos disponibles"
             )
         

@@ -5,6 +5,8 @@ import sys
 import os
 import time
 
+from handlers.horarios import set_state
+
 # Añadir directorio padre al path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db.queries import get_matriculas, get_usuarios_by_multiple_ids, insert_valoracion, get_usuarios
@@ -14,11 +16,6 @@ from db.queries import get_matriculas, get_usuarios_by_multiple_ids, insert_valo
 user_states = {}
 user_data = {}
 estados_timestamp = {}
-
-# Añadir timestamp cuando se establece un estado
-def set_user_state(chat_id, state):
-    user_states[chat_id] = state
-    estados_timestamp[chat_id] = time.time()
 
 def register_handlers(bot):
     """Registra todos los handlers relacionados con valoraciones"""
@@ -45,9 +42,9 @@ def register_handlers(bot):
         
         # Buscar profesores disponibles para valorar        
         # Obtener profesores de las asignaturas del estudiante
-        matriculas = get_matriculas(Id_Usuario=user['Id_usuario'])
+        matriculas = get_matriculas(Id_usuario=user['Id_usuario'])
         ids_asignaturas = []
-
+        
         for matricula in matriculas:
             ids_asignaturas.append(matricula['Id_asignatura'])
 
@@ -56,7 +53,7 @@ def register_handlers(bot):
 
         for matricula in matriculas_profesores:
             if matricula['Id_asignatura'] in ids_asignaturas:
-                ids_profesores = matricula['Id_usuario']
+                ids_profesores.append(matricula['Id_usuario'])
         
         profesores = get_usuarios_by_multiple_ids(ids_profesores)
         
@@ -152,7 +149,7 @@ def register_handlers(bot):
                 chat_id,
                 "Por favor, escribe tu comentario sobre el profesor:"
             )
-            set_user_state(chat_id, "escribiendo_comentario")
+            set_state(chat_id, "escribiendo_comentario")
         else:
             # No quiere dejar comentario, preguntar si valoración anónima
             preguntar_valoracion_anonima(chat_id, bot)
@@ -192,7 +189,7 @@ def register_handlers(bot):
         
         # Guardar valoración en la base de datos
         try:
-            evaluador_id = get_usuarios(call.from_user.id)[0]['Id_usuario']
+            evaluador_id = get_usuarios(TelegramID=call.from_user.id)[0]['Id_usuario']
             profesor_id = user_data[chat_id]["profesor_id"]
             puntuacion = user_data[chat_id]["puntuacion"]
             comentario = user_data[chat_id].get("comentario", "")

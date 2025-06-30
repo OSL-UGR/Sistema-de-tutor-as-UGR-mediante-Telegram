@@ -8,6 +8,8 @@ import sys
 import os
 
 import telegram
+
+from utils.state_manager import clear_state, set_state
 # Add parent directory to system path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Now import after modifying the path
@@ -35,17 +37,6 @@ estados_timestamp = {}  # Para timeout de estados
 # Tiempo de inactividad (30 minutos)
 TIMEOUT = 30 * 60
 
-def set_state(chat_id, state):
-    """Establece el estado de la conversación para un usuario"""
-    user_states[chat_id] = state
-    estados_timestamp[chat_id] = time.time()
-
-def clear_state(chat_id):
-    """Limpia el estado de la conversación para un usuario"""
-    if chat_id in user_states:
-        del user_states[chat_id]
-    if chat_id in estados_timestamp:
-        del estados_timestamp[chat_id]
 
 def check_timeout(chat_id):
     """Comprueba si ha pasado demasiado tiempo desde la última interacción"""

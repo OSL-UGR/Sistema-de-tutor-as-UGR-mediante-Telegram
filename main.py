@@ -8,10 +8,6 @@ from config import BOT_TOKEN, DB_PATH,EXCEL_PATH
 
 # Importar funciones para manejar estados
 from db.db import close_connection, commit
-from utils.state_manager import get_state, set_state, clear_state, user_states, user_data
-
-# Importar funciones para manejar el Excel
-from utils.excel_manager import cargar_excel, importar_datos_desde_excel
 # Reemplaza todos los handlers universales por este ÚNICO handler al final
 # Inicializar el bot de Telegram
 bot = telebot.TeleBot(BOT_TOKEN) 
@@ -34,6 +30,7 @@ def setup_commands():
             telebot.types.BotCommand("/start", "Inicia el bot y el registro"),
             telebot.types.BotCommand("/help", "Muestra la ayuda del bot"),
             telebot.types.BotCommand("/tutoria", "Ver profesores disponibles para tutoría"),
+            telebot.types.BotCommand("/valorar_profesor", "Valora un profesor"),
             telebot.types.BotCommand("/crear_grupo_tutoria", "Crea un grupo de tutoría"),
             telebot.types.BotCommand("/configurar_horario", "Configura tu horario de tutorías"),
             telebot.types.BotCommand("/ver_misdatos", "Ver tus datos registrados")
@@ -64,10 +61,15 @@ def handle_help(message):
         "🤖 *Comandos disponibles:*\n\n"
         "/start - Inicia el bot y el proceso de registro\n"
         "/help - Muestra este mensaje de ayuda\n"
-        "/tutoria - Ver profesores disponibles para tutoría\n"
-        "/ver_misdatos - Ver tus datos registrados\n"
+        
     )
-    
+    if user['Tipo'] == 'estudiante':
+        help_text += (
+            "/tutoria - Ver profesores disponibles para tutoría\n"
+            "/ver_misdatos - Ver tus datos registrados\n"
+            "/valorar_profesor - Dar una valoración a un profesor\n"
+        )
+
     if user['Tipo'] == 'profesor':
         help_text += (
             "/configurar_horario - Configura tu horario de tutorías\n"
@@ -201,33 +203,13 @@ def handle_ver_misdatos(message):
 from handlers.registro import register_handlers as register_registro_handlers
 from handlers.tutorias import register_handlers as register_tutorias_handlers
 from handlers.horarios import register_handlers as register_horarios_handlers
-from utils.excel_manager import verificar_excel_disponible
-from grupo_handlers.grupos import GestionGrupos
-
-# Verificar si es la primera ejecución
-MARKER_FILE = os.path.join(os.path.dirname(DB_PATH), ".initialized")
-primera_ejecucion = not os.path.exists(MARKER_FILE)
-
-# Verificar que el Excel existe pero no cargar datos
-print("📊 Cargando datos académicos...")
-if verificar_excel_disponible():
-    print("✅ Excel encontrado")
-    # Primera vez - importar todo
-    if primera_ejecucion:  # Usa alguna forma de detectar primer inicio
-        importar_datos_desde_excel(solo_nuevos=False)
-        # Crear archivo marcador para futuras ejecuciones
-        with open(MARKER_FILE, 'w') as f:
-            f.write("Initialized")
-    else:
-        # Ejecuciones posteriores - solo nuevos datos
-        importar_datos_desde_excel(solo_nuevos=True)
-else:
-    print("⚠️ Excel no encontrado")
+from handlers.valoraciones import register_handlers as register_valoraciones_handlers
 
 # Registrar todos los handlers
 register_registro_handlers(bot)
 register_tutorias_handlers(bot)
 register_horarios_handlers(bot)
+register_valoraciones_handlers(bot)
 
 
 # Handlers para cambio de propósito de salas de tutoría
@@ -303,16 +285,6 @@ def handle_edit_sala(call):
     bot.answer_callback_query(call.id)
     print("✅ Respuesta de callback enviada")
     print(f"### FIN EDIT_SALA - Callback: {call.data} ###\n")
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("cancelar_edicion_"))
-def handle_cancelar_edicion(call):
-    """Cancela la edición de la sala"""
-    bot.edit_message_text(
-        "❌ Operación cancelada. No se realizaron cambios.",
-        chat_id=call.message.chat.id,
-        message_id=call.message.message_id
-    )
-    bot.answer_callback_query(call.id)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("cambiar_proposito_"))
 def handle_cambiar_proposito(call):
@@ -473,7 +445,7 @@ def handle_confirmar_cambio(call):
                 # Si falla, utilizar la función del bot de grupos
                 try:
                     # Importar la función de cambio de nombre de grupos.py
-                    from grupo_handlers.grupos import cambiar_nombre_grupo_telegram
+                    from handlers_grupo.grupos import cambiar_nombre_grupo_telegram
                     
                     # Llamar a la función para cambiar el nombre
                     if cambiar_nombre_grupo_telegram(telegram_chat_id, nuevo_nombre):
@@ -569,12 +541,12 @@ def handle_ver_miembros(call):
     
     # Obtener lista de miembros    
     miembros = get_miembros_grupos(id_sala=sala_id, Estado='activo')
-    miembros.sort(key=lambda x: x['Fecha_incorporacion'], reverse=True)
     ids_miembros = [m['Id_usuario'] for m in miembros]
     datos_miembros = get_usuarios_by_multiple_ids(ids_miembros)
-
-    orden = {id_: i for i, id_ in enumerate(ids_miembros)}
-    datos_miembros.sort(key=lambda x: orden[x["Id_usuario"]])   #Ordenar como los miembros
+    
+    datos_miembros.sort(key=lambda x: (x['Nombre']+" "+x['Apellidos']))
+    orden = {d['Id_usuario']: i for i, d in enumerate(datos_miembros)}
+    miembros.sort(key=lambda x: orden[x["Id_usuario"]])
     
     # Obtener información de la sala
     sala = get_grupos_tutoria(id_sala=sala_id)[0]["Nombre_sala"]
@@ -642,12 +614,12 @@ def notificar_cambio_sala(sala_id, nuevo_proposito):
     
     # Obtener miembros de la sala
     miembros = get_miembros_grupos(id_sala=sala_id, Estado='activo')
-    miembros.sort(key=lambda x: x['Fecha_incorporacion'], reverse=True)
     ids_miembros = [m['Id_usuario'] for m in miembros]
     miembros_datos = get_usuarios_by_multiple_ids(ids_miembros)
 
-    orden = {id_: i for i, id_ in enumerate(ids_miembros)}
-    miembros_datos.sort(key=lambda x: orden[x["Id_usuario"]])   #Ordenar como los miembros
+    miembros_datos.sort(key=lambda x: (x['Nombre']+" "+x['Apellidos']))
+    orden = {d['Id_usuario']: i for i, d in enumerate(miembros_datos)}
+    miembros.sort(key=lambda x: orden[x["Id_usuario"]])
     
     # Textos para los propósitos (simplificado)
     propositos = {
@@ -740,7 +712,7 @@ def realizar_cambio_proposito(chat_id, message_id, sala_id, nuevo_proposito, use
                 # Si falla, utilizar la función del bot de grupos
                 try:
                     # Importar la función de cambio de nombre de grupos.py
-                    from grupo_handlers.grupos import cambiar_nombre_grupo_telegram
+                    from handlers_grupo.grupos import cambiar_nombre_grupo_telegram
                     
                     # Llamar a la función para cambiar el nombre
                     if cambiar_nombre_grupo_telegram(telegram_chat_id, nuevo_nombre):
@@ -907,7 +879,7 @@ def handle_confirmar_eliminar(call):
             
             # Intentar con el bot de grupos si está disponible
             try:
-                from grupo_handlers.grupos import salir_de_grupo
+                from handlers_grupo.grupos import salir_de_grupo
                 if salir_de_grupo(telegram_chat_id):
                     print("  ✓ Bot de grupos salió del grupo")
                 else:
@@ -1195,7 +1167,7 @@ def handler_volver_instrucciones(call):
     
     print("### FIN VOLVER_INSTRUCCIONES CALLBACK ###\n\n")
 
-# Añadir al final del archivo, después de la función obtener_nombre_profesor
+
 
 def setup_polling():
     """Configura el polling para el bot y maneja errores"""

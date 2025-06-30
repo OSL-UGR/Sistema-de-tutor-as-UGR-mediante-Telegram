@@ -764,29 +764,3 @@ def verificar_horario_tutoria(horario_str):
         print(f"No se encontraron horarios para el día actual ({ahora.strftime('%A')})")
     
     return False
-
-
-def registrar_solicitud_tutoria(estudiante_id, profesor_id, sala_id):
-    """
-    Registra una solicitud de tutoría en la base de datos
-    
-    Args:
-        estudiante_id (int): ID del estudiante que solicita
-        profesor_id (int): ID del profesor
-        sala_id (int): ID de la sala solicitada
-    """
-    try:        
-        # Verificar si ya existe un registro de este estudiante en esta sala
-        miembro = get_miembros_grupos(id_sala=sala_id, Id_usuario=estudiante_id)[0]
-        
-        if miembro:
-            # Si ya existe, actualizar su estado a activo si no lo está
-            update_miembro_grupo(sala_id, estudiante_id, 'activo')
-        else:
-            # Si no existe, crear un nuevo registro
-            insert_miembro_grupo(sala_id, estudiante_id, 'pendiente')
-        
-        print(f"✅ Solicitud registrada: Estudiante {estudiante_id} para sala {sala_id}")
-        
-    except Exception as e:
-        print(f"❌ Error al registrar solicitud de tutoría: {e}")

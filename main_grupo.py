@@ -13,10 +13,9 @@ import sqlite3
 from dotenv import load_dotenv
 
 # Importar utilidades y handlers
-from grupo_handlers.grupos import GestionGrupos
-from grupo_handlers.valoraciones import register_handlers as register_valoraciones_handlers
-from grupo_handlers.usuarios import register_student_handlers
-from grupo_handlers.utils import (
+from handlers_grupo.grupos import GestionGrupos
+from handlers_grupo.usuarios import register_student_handlers
+from handlers_grupo.utils import (
     limpiar_estados_obsoletos, es_profesor, menu_profesor, menu_estudiante, 
     configurar_logger, configurar_comandos_por_rol
 )
@@ -158,14 +157,14 @@ def send_welcome(message):
     logger.info(f"Usuario {user_id} ({user['Nombre']}) ha iniciado el bot en chat {chat_id}")
     actualizar_interfaz_usuario(user_id, chat_id)
 
-@bot.message_handler(commands=['ayuda'])
-def ayuda_comando(message):
+@bot.message_handler(commands=['help'])
+def help_handler(message):
     chat_id = message.chat.id
     bot.send_message(
         chat_id,
         "ℹ️ *Ayuda del Bot*\n\n"
         "🔹 Usa los siguientes comandos para interactuar con el bot:\n"
-        "✅ /ayuda - Muestra este mensaje de ayuda.\n"
+        "✅ /help - Muestra este mensaje de ayuda.\n"
         "✅ Pulsa el botón '❌ Terminar Tutoria' para finalizar tu consulta o expulsar a un estudiante (solo para profesores).\n"
         "✅ /start - Almacena tus datos y te da la bienvenida si eres estudiante.",
         parse_mode="Markdown"
@@ -301,8 +300,8 @@ def configurar_grupo(message):
 
     if asignaturas_disponibles:
         for asig in asignaturas_disponibles:
-            callback_data = f"config_asig_{asig[0]}"
-            markup.add(types.InlineKeyboardButton(text=asig[1], callback_data=callback_data))
+            callback_data = f"config_asig_{asig["Id_asignatura"]}"
+            markup.add(types.InlineKeyboardButton(text=asig["Asignatura"], callback_data=callback_data))
 
     # Añadir opción de tutoría privada SOLO si no tiene una ya
     if not tiene_privada:
@@ -624,12 +623,13 @@ def handle_ver_estudiantes_cmd(message):
         
         # Obtener lista de estudiantes  
         miembros = get_miembros_grupos(sala_id=sala_id)
-        miembros.sort(key=lambda x: x['Fecha_incorporacion'], reverse=True)
         ids_estudiantes = [m['Id_usuario'] for m in miembros]
         estudiantes_miembros = get_usuarios_by_multiple_ids(ids_estudiantes)
 
-        orden = {id_: i for i, id_ in enumerate(ids_estudiantes)}
-        estudiantes_miembros.sort(key=lambda x: orden[x["Id_usuario"]])   #Ordenar como los miembros
+        estudiantes_miembros.sort(key=lambda x: (x['Nombre']+" "+x['Apellidos']))
+        orden = {d['Id_usuario']: i for i, d in enumerate(estudiantes_miembros)}
+        miembros.sort(key=lambda x: orden[x["Id_usuario"]])
+
 
         
         if not estudiantes_miembros:
@@ -890,52 +890,6 @@ def handle_group_creation(message):
         "Una vez me hayas hecho administrador, usa el comando /configurar_grupo."
     )
 
-
-
-# Registrar handlers externos
-if __name__ == "__main__":
-    print("\n==================================================")
-    print("🚀🚀🚀 INICIANDO BOT DE GRUPOS Y TUTORÍAS 🚀🚀🚀")
-    print("==================================================\n")
-    
-    # Eliminar cualquier webhook existente
-    bot.remove_webhook()
-    
-    # Iniciar el hilo de limpieza periódica
-    limpieza_thread = threading.Thread(target=limpieza_periodica)
-    limpieza_thread.daemon = True
-    limpieza_thread.start()
-    
-    try:
-        # Registrar handlers de usuarios primero para darle prioridad
-        from grupo_handlers.usuarios import register_student_handlers
-        register_student_handlers(bot)
-        print("✅ Handler de nuevos estudiantes registrado")
-        
-        # NO registres más handlers para new_chat_members aquí
-        
-        # Resto del código...
-        gestion_grupos = GestionGrupos(db_path="db/tutoria.db")
-        gestion_grupos.registrar_handlers(bot)
-        print("✅ Handlers de gestión de grupos registrados")
-        
-        register_valoraciones_handlers(bot)
-        print("✅ Handlers de valoraciones registrados")
-        
-        print("🤖 Bot iniciando polling...")
-        
-        # Usar polling con configuración mejorada
-        bot.polling(
-            none_stop=True, 
-            interval=0, 
-            timeout=60,
-            allowed_updates=["message", "callback_query", "chat_member", "my_chat_member"]  # Asegúrate de incluir chat_member
-        )
-        
-    except Exception as e:
-        logger.critical(f"Error crítico al iniciar el bot: {e}")
-        print(f"❌ ERROR CRÍTICO: {e}")
-
 @bot.my_chat_member_handler()
 def handle_bot_status_update(update):
     """Responde cuando el estado del bot cambia en un chat"""
@@ -979,3 +933,42 @@ def handle_bot_status_update(update):
         import traceback
         traceback.print_exc()
 
+
+# Registrar handlers externos
+if __name__ == "__main__":
+    print("\n==================================================")
+    print("🚀🚀🚀 INICIANDO BOT DE GRUPOS Y TUTORÍAS 🚀🚀🚀")
+    print("==================================================\n")
+    
+    # Eliminar cualquier webhook existente
+    bot.remove_webhook()
+    
+    # Iniciar el hilo de limpieza periódica
+    limpieza_thread = threading.Thread(target=limpieza_periodica)
+    limpieza_thread.daemon = True
+    limpieza_thread.start()
+    
+    try:
+        # Registrar handlers de usuarios primero para darle prioridad
+        from handlers_grupo.usuarios import register_student_handlers
+        register_student_handlers(bot)
+        print("✅ Handler de nuevos estudiantes registrado")
+        
+        # NO registres más handlers para new_chat_members aquí
+        
+        # Resto del código...
+        gestion_grupos = GestionGrupos(db_path="db/tutoria.db")
+        gestion_grupos.registrar_handlers(bot)
+        print("✅ Handlers de gestión de grupos registrados")        
+        
+        # Usar polling con configuración mejorada
+        bot.polling(
+            none_stop=True, 
+            interval=0, 
+            timeout=60,
+            allowed_updates=["message", "callback_query", "chat_member", "my_chat_member"]  # Asegúrate de incluir chat_member
+        )
+        
+    except Exception as e:
+        logger.critical(f"Error crítico al iniciar el bot: {e}")
+        print(f"❌ ERROR CRÍTICO: {e}")
