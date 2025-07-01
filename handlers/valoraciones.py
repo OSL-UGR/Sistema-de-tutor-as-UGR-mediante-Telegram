@@ -6,16 +6,11 @@ import os
 import time
 
 from handlers.horarios import set_state
+from utils.state_manager import clear_state, get_state, user_data
 
 # Añadir directorio padre al path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db.queries import get_matriculas, get_usuarios_by_multiple_ids, insert_valoracion, get_usuarios
-
-
-# Crear estas variables localmente en vez de importarlas
-user_states = {}
-user_data = {}
-estados_timestamp = {}
 
 def register_handlers(bot):
     """Registra todos los handlers relacionados con valoraciones"""
@@ -103,10 +98,10 @@ def register_handlers(bot):
         ]
         markup.add(*buttons)
         
-        bot.send_message(
-            chat_id,
-            f"Vas a valorar a: *{profesor['Nombre']}*\n\n"
-            "¿Qué puntuación le darías del 1 al 5?",
+        bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=call.message.message_id,
+            text=f"Vas a valorar a: *{profesor['Nombre']}*\n\n¿Qué puntuación le darías del 1 al 5?",
             reply_markup=markup,
             parse_mode="Markdown"
         )
@@ -130,10 +125,10 @@ def register_handlers(bot):
         # Mostramos las estrellas de forma visual
         estrellas = "⭐" * puntuacion
         
-        bot.send_message(
-            chat_id,
-            f"Has dado una puntuación de {estrellas}\n\n"
-            "¿Deseas añadir un comentario adicional?",
+        bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=call.message.message_id,
+            text=f"Has dado una puntuación de {estrellas}\n\n¿Deseas añadir un comentario adicional?",
             reply_markup=markup
         )
         
@@ -145,40 +140,52 @@ def register_handlers(bot):
         opcion = call.data.split("_")[1]
         
         if opcion == "si":
-            bot.send_message(
-                chat_id,
-                "Por favor, escribe tu comentario sobre el profesor:"
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=call.message.message_id,
+                text="Por favor, escribe tu comentario sobre el profesor:"
             )
             set_state(chat_id, "escribiendo_comentario")
+            user_data[chat_id]["id_mensaje"] = call.message.message_id
         else:
             # No quiere dejar comentario, preguntar si valoración anónima
-            preguntar_valoracion_anonima(chat_id, bot)
+            preguntar_valoracion_anonima(chat_id, bot, call)
         
         bot.answer_callback_query(call.id)
     
-    @bot.message_handler(func=lambda message: user_states.get(message.chat.id) == "escribiendo_comentario")
+    @bot.message_handler(func=lambda message: get_state(message.chat.id) == "escribiendo_comentario")
     def handle_comentario_profesor(message):
         chat_id = message.chat.id
         comentario = message.text.strip()
         
         user_data[chat_id]["comentario"] = comentario
+
+        bot.delete_message(chat_id, message.id)
         
         # Preguntar si valoración anónima
         preguntar_valoracion_anonima(chat_id, bot)
     
-    def preguntar_valoracion_anonima(chat_id, bot):
+    def preguntar_valoracion_anonima(chat_id, bot, call=None):
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(
             types.InlineKeyboardButton("Sí, anónima", callback_data="anonimo_si"),
             types.InlineKeyboardButton("No, mostrar mi nombre", callback_data="anonimo_no")
         )
-        
-        bot.send_message(
-            chat_id,
-            "¿Deseas que tu valoración sea anónima?\n\n"
-            "Si eliges 'No', el profesor podrá ver tu nombre.",
-            reply_markup=markup
-        )
+        if call is not None:
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=call.message.message_id,
+                text="¿Deseas que tu valoración sea anónima?\n\nSi eliges 'No', el profesor podrá ver tu nombre.",
+                reply_markup=markup
+            )
+        else:
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=user_data[chat_id]["id_mensaje"],
+                text="¿Deseas que tu valoración sea anónima?\n\nSi eliges 'No', el profesor podrá ver tu nombre.",
+                reply_markup=markup
+            )
+            del user_data[chat_id]["id_mensaje"]
     
     @bot.callback_query_handler(func=lambda call: call.data.startswith("anonimo_"))
     def handle_opcion_anonima(call):
@@ -197,12 +204,13 @@ def register_handlers(bot):
             
             insert_valoracion(evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, user_data[chat_id].get("sala_id"))
             
-            bot.send_message(
-                chat_id,
-                "✅ ¡Valoración guardada correctamente!\n\n"
-                f"Has valorado a *{user_data[chat_id]['profesor_nombre']}* con "
-                f"{puntuacion} estrellas.\n\n"
-                "Gracias por tu feedback.",
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=call.message.message_id,
+                text=f"✅ ¡Valoración guardada correctamente!\n\n"
+                +f"Has valorado a *{user_data[chat_id]['profesor_nombre']}* con "
+                +f"{puntuacion} estrellas.\n\n"
+                +"Gracias por tu feedback.",
                 parse_mode="Markdown"
             )
             
@@ -213,8 +221,7 @@ def register_handlers(bot):
             )
         
         finally:
-            user_states.pop(chat_id, None)
-            user_data.pop(chat_id, None)
+            clear_state(chat_id)
         
         bot.answer_callback_query(call.id)
         
@@ -257,7 +264,7 @@ def iniciar_valoracion_profesor(bot, profesor_id, estudiante_id, sala_id=None):
     markup.add(*buttons)
     
     # Enviar nuevo mensaje
-    bot.send_message(
+    bot.edit_message_text(
         chat_id=chat_id,
         text=f"Vas a valorar la tutoría con: *{profesor['Nombre']}*\n\n¿Qué puntuación le darías?",
         reply_markup=markup,

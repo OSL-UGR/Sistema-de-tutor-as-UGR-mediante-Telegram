@@ -9,7 +9,7 @@ import os
 
 import telegram
 
-from utils.state_manager import clear_state, set_state
+from utils.state_manager import get_state, user_data, estados_timestamp, clear_state, set_state
 # Add parent directory to system path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Now import after modifying the path
@@ -29,10 +29,6 @@ CONFIRMACION_GUARDAR = "confirmacion_guardar"
 POST_ANADIR_FRANJA = "post_anadir_franja"
 MODIFICAR_FRANJA = "modificar_franja"
 
-# Diccionarios para almacenar estados y datos temporales
-user_states = {}
-user_data = {}
-estados_timestamp = {}  # Para timeout de estados
 
 # Tiempo de inactividad (30 minutos)
 TIMEOUT = 30 * 60
@@ -223,7 +219,7 @@ def register_handlers(bot):
         bot.send_message(chat_id, mensaje, reply_markup=markup, parse_mode="Markdown")
         set_state(chat_id, SELECCIONANDO_DIA)
     
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("dia_") and user_states.get(call.message.chat.id) == SELECCIONANDO_DIA)
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("dia_") and get_state(call.message.chat.id) == SELECCIONANDO_DIA)
     def handle_seleccion_dia(call):
         """Maneja la selección de un día de la semana"""
         chat_id = call.message.chat.id
@@ -258,7 +254,7 @@ def register_handlers(bot):
         set_state(chat_id, GESTION_FRANJAS)
         bot.answer_callback_query(call.id)
     
-    @bot.callback_query_handler(func=lambda call: call.data == "volver_dias" and user_states.get(call.message.chat.id) in [GESTION_FRANJAS, POST_ANADIR_FRANJA])
+    @bot.callback_query_handler(func=lambda call: call.data == "volver_dias" and get_state(call.message.chat.id) in [GESTION_FRANJAS, POST_ANADIR_FRANJA])
     def handle_volver_dias(call):
         """Vuelve a la selección de días"""
         chat_id = call.message.chat.id
@@ -443,7 +439,7 @@ def register_handlers(bot):
         clear_state(chat_id)
         bot.answer_callback_query(call.id)
     
-    @bot.message_handler(func=lambda m: user_states.get(m.chat.id) == INTRODUCIR_FRANJA)
+    @bot.message_handler(func=lambda m: get_state(m.chat.id) == INTRODUCIR_FRANJA)
     def handle_introducir_franja(message):
         """Procesa la introducción de una nueva franja horaria"""
         chat_id = message.chat.id

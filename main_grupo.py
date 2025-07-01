@@ -20,7 +20,7 @@ from handlers_grupo.utils import (
     configurar_logger, configurar_comandos_por_rol
 )
 # Importar estados desde el manejador central
-from utils.state_manager import user_states, user_data, estados_timestamp, set_state, get_state, clear_state
+from utils.state_manager import user_data, set_state, get_state, clear_state
 
 # Configuración de logging
 logger = configurar_logger()
@@ -596,6 +596,7 @@ def handle_proposito_sala(call):
     
     # Limpiar estado
     clear_state(user_id)    
+
 @bot.message_handler(func=lambda message: message.text == "👨‍🎓 Ver estudiantes")
 def handle_ver_estudiantes_cmd(message):
     """Maneja el comando de ver estudiantes desde el teclado personalizado"""

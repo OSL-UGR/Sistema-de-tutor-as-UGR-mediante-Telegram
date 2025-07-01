@@ -27,7 +27,7 @@ from db.queries import (
     update_usuario
 )
 # Añadir al inicio del archivo
-from utils.state_manager import get_state, clear_state, user_data, user_states, estados_timestamp
+from utils.state_manager import get_state, clear_state, user_data
 
 # Variables para seguridad de token
 token_intentos_fallidos = {}  # {chat_id: número de intentos}
@@ -155,9 +155,8 @@ def register_handlers(bot):
         )
         set_state(chat_id, STATE_EMAIL)
         user_data[chat_id] = {}  # Reinicia los datos del usuario
-        estados_timestamp[chat_id] = time.time()
 
-    @bot.message_handler(func=lambda message: user_states.get(message.chat.id) == STATE_EMAIL)
+    @bot.message_handler(func=lambda message: get_state(message.chat.id) == STATE_EMAIL)
     def handle_email(message):
         """Procesa el correo electrónico y envía código de verificación"""
         chat_id = message.chat.id

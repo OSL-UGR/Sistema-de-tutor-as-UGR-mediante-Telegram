@@ -8,22 +8,7 @@ import sys
 from pathlib import Path
 from telebot import types
 
-# Configurar paths para importaciones
-root_path = str(Path(__file__).parent.parent.absolute())
-if root_path not in sys.path:
-    sys.path.insert(0, root_path)
-
-# Cargar state_manager usando importación dinámica para evitar problemas de rutas
-import importlib.util
-state_manager_path = Path(__file__).parent.parent / "utils" / "state_manager.py"
-spec = importlib.util.spec_from_file_location("state_manager", state_manager_path)
-state_manager = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(state_manager)
-
-# Obtener las variables de estado
-user_states = state_manager.user_states
-user_data = state_manager.user_data
-estados_timestamp = state_manager.estados_timestamp
+from utils.state_manager import estados_timestamp, clear_state
 
 # Importar funciones de la base de datos compartidas
 from db.queries import (
@@ -117,11 +102,7 @@ def limpiar_estados_obsoletos():
     
     # Eliminar estados obsoletos
     for user_id in usuarios_para_limpiar:
-        if user_id in user_states:
-            logger.info(f"Limpiando estado obsoleto para usuario {user_id}")
-            del user_states[user_id]
-        if user_id in estados_timestamp:
-            del estados_timestamp[user_id]
+        clear_state(user_id)
     
     if usuarios_para_limpiar:
         logger.info(f"Limpiados {len(usuarios_para_limpiar)} estados obsoletos")

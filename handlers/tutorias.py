@@ -42,14 +42,6 @@ def escape_markdown(text: str) -> str:
 
 
 
-
-
-
-# Referencias externas necesarias
-user_states = {}
-user_data = {}
-estados_timestamp = {}  
-
 def register_handlers(bot):
     """Registra todos los handlers de tutorías"""
     
@@ -64,8 +56,6 @@ def register_handlers(bot):
         
         # Obtener información del usuario
         user = get_usuarios(TelegramID=user_id)[0]
-
-        print("HEYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY")
         
         # Diagnóstico: Verificar si hay salas en la base de datos        
         # Contar todas las salas
