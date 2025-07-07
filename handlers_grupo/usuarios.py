@@ -8,27 +8,18 @@ import logging
 import os
 import sys
 
+from handlers_grupo.utils import configurar_logger
+from utils.state_manager import set_state
 from db.queries import get_grupos_tutoria
+from db.constantes import *
 
 # Configuración de ruta para importar correctamente
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Configurar logging
-logger = logging.getLogger(__name__)
+logger = configurar_logger()
 
-def menu_estudiante():
-    """Crea un teclado personalizado con solo el botón de finalizar tutoría"""
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row(types.KeyboardButton("❌ Terminar Tutoria"))
-    return markup
-
-def menu_profesor():
-    """Crea un menú de opciones para profesores"""
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(types.InlineKeyboardButton("🔚 Finalizar tutoría", callback_data="fin_tutoria_profesor"))
-    return markup
-
-def register_student_handlers(bot):
+def register_handlers(bot):
     """Registra los handlers para gestionar nuevos estudiantes."""
     print("\n==================================================")
     print("👨‍🎓👨‍🎓👨‍🎓 REGISTRANDO HANDLER DE NUEVOS ESTUDIANTES 👨‍🎓👨‍🎓👨‍🎓")
@@ -73,27 +64,29 @@ def register_student_handlers(bot):
                 
                 # Obtener información del grupo                
                 # Verificar si el grupo es un grupo de tutorías
-                grupo = get_grupos_tutoria(Chat_id=str(chat_id))[0]
+                grupo = get_grupos_tutoria(GRUPO_ID_CHAT=str(chat_id))[0]
                 
                 try:
-                    print(f"📨 Intentando enviar mensaje de bienvenida para {user.first_name}")
-                    mensaje = bot.send_message(
-                        chat_id,
-                        f"👋 Bienvenido/a {user.first_name} al grupo.\n\n"
-                        f"Cuando termines tu consulta, usa el botón para finalizar la tutoría.",
-                        reply_markup=menu_estudiante()  # Usa la función correcta importada de utils
-                    )
-                    print(f"✅ Mensaje enviado con ID: {mensaje.message_id}")
+                    if(grupo[GRUPO_TIPO] == GRUPO_PRIVADO):
+                        print(f"📨 Intentando enviar mensaje de bienvenida para {user.first_name}")
+                        mensaje = bot.send_message(
+                            chat_id,
+                            f"👋 Bienvenido/a {user.first_name} al grupo.\n\n"
+                            f"Cuando termines tu consulta, usa el botón o /finalizar para finalizar la tutoría.",
+                            reply_markup=menu_estudiante()  # Usa la función correcta importada de utils
+                        )
+                        print(f"✅ Mensaje enviado con ID: {mensaje.message_id}")
+                        set_state(chat_id,user.id)
                 except Exception as e:
                     print(f"❌ ERROR enviando mensaje de bienvenida: {e}")
                     import traceback
                     traceback.print_exc()
                 
                 if not grupo:
-                    print(f"ℹ️ Grupo {chat_id} no es una sala de tutoría - No se procesa más")
+                    print(f"ℹ️ Grupo {chat_id} no es una grupo de tutoría - No se procesa más")
                     return
                 
-                # Si llegamos aquí, el grupo es una sala de tutoría registrada
+                # Si llegamos aquí, el grupo es una grupo de tutoría registrada
                 # Continúa con la lógica para grupos registrados
                 
                 # ...resto de tu código para grupos registrados...
@@ -128,27 +121,29 @@ def register_student_handlers(bot):
                 print(f"👤 Procesando estudiante: {new_member.first_name} (ID: {user_id})")
                 
                 # Verificar si el grupo es de tutorías
-                grupo = get_grupos_tutoria(Chat_id=str(chat_id))[0]
+                grupo = get_grupos_tutoria(GRUPO_ID_CHAT=str(chat_id))[0]
+
+                if not grupo:
+                    print(f"ℹ️ Grupo {chat_id} no es una grupo de tutoría - No se procesa más")
+                    continue
                 
                 # Enviar mensaje de bienvenida siempre
                 try:
-                    print(f"📨 Intentando enviar mensaje de bienvenida para {new_member.first_name}")
-                    mensaje = bot.send_message(
-                        chat_id,
-                        f"👋 Bienvenido/a {new_member.first_name} al grupo.\n\n"
-                        f"Cuando termines tu consulta, usa el botón para finalizar la tutoría.",
-                        reply_markup=menu_estudiante()  # Usa la función correcta importada de utils
-                    )
-                    print(f"✅ Mensaje enviado con ID: {mensaje.message_id}")
+                    if(grupo[GRUPO_TIPO] == GRUPO_PRIVADO):
+                        print(f"📨 Intentando enviar mensaje de bienvenida para {new_member.first_name}")
+                        mensaje = bot.send_message(
+                            chat_id,
+                            f"👋 Bienvenido/a {new_member.first_name} al grupo.\n\n"
+                            f"Cuando termines tu consulta, usa el botón o /finalizar para finalizar la tutoría.",
+                            reply_markup=menu_estudiante()  # Usa la función correcta importada de utils
+                        )
+                        set_state(chat_id,user_id)
+                        print(f"✅ Mensaje enviado con ID: {mensaje.message_id}")
                 except Exception as e:
                     print(f"❌ ERROR enviando mensaje de bienvenida: {e}")
                     import traceback
                     traceback.print_exc()
-                
-                if not grupo:
-                    print(f"ℹ️ Grupo {chat_id} no es una sala de tutoría - No se procesa más")
-                    continue
-                
+                    
                 # Resto de tu lógica para grupos registrados
                 # ...
                 

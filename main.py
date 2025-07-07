@@ -6,7 +6,9 @@ import os
 import sys
 from config import BOT_TOKEN, DB_PATH,EXCEL_PATH
 from db.db import close_connection
-from db.queries import get_grupos_tutoria, get_usuarios
+from db.queries import get_grupos_tutoria, get_matriculas, get_usuarios
+from db.constantes import *
+
 # Reemplaza todos los handlers universales por este ÚNICO handler al final
 # Inicializar el bot de Telegram
 bot = telebot.TeleBot(BOT_TOKEN) 
@@ -44,7 +46,7 @@ def setup_commands():
 def handle_help(message):
     """Muestra la ayuda del bot"""
     chat_id = message.chat.id
-    user = get_usuarios(TelegramID=message.from_user.id)[0]
+    user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)
     
     if not user:
         bot.send_message(
@@ -52,6 +54,7 @@ def handle_help(message):
             "❌ No estás registrado. Usa /start para registrarte."
         )
         return
+    user = user[0]
     
     help_text = (
         "🤖 *Comandos disponibles:*\n\n"
@@ -59,14 +62,14 @@ def handle_help(message):
         "/help - Muestra este mensaje de ayuda\n"
         
     )
-    if user['Tipo'] == 'estudiante':
+    if user[USUARIO_TIPO] == USUARIO_TIPO_ESTUDIANTE:
         help_text += (
             "/tutoria - Ver profesores disponibles para tutoría\n"
             "/ver_misdatos - Ver tus datos registrados\n"
             "/valorar_profesor - Dar una valoración a un profesor\n"
         )
 
-    if user['Tipo'] == 'profesor':
+    if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
         help_text += (
             "/configurar_horario - Configura tu horario de tutorías\n"
             "/crear_grupo_tutoria - Crea un grupo de tutoría\n"
@@ -86,33 +89,34 @@ def handle_help(message):
 def handle_ver_misdatos(message):
     chat_id = message.chat.id
     print(f"\n\n### INICIO VER_MISDATOS - Usuario: {message.from_user.id} ###")
+    print(message.from_user.id)
     
-    user = get_usuarios(TelegramID=message.from_user.id)[0]
+    user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)
     
     if not user:
         print("⚠️ Usuario no encontrado en BD")
         bot.send_message(chat_id, "❌ No estás registrado. Usa /start para registrarte.")
         return
     
-    print(f"✅ Usuario encontrado: {user['Nombre']} ({user['Tipo']})")
+    user = user[0]
+    print(f"✅ Usuario encontrado: {user[USUARIO_NOMBRE]} ({user[USUARIO_TIPO]})")
     
     # Convertir el objeto sqlite3.Row a diccionario
     user_dict = dict(user)
     
     # Obtener matrículas del usuario
-    from db.queries import get_matriculas
-    matriculas = get_matriculas(Id_usuario=user['Id_usuario'])
+    matriculas = get_matriculas(MATRICULA_ID_USUARIO=user[USUARIO_ID])
     
     user_info = (
         f"👤 *Datos de usuario:*\n\n"
-        f"*Nombre:* {user['Nombre']}\n"
-        f"*Correo:* {user['Email_UGR'] or 'No registrado'}\n"
-        f"*Tipo:* {user['Tipo'].capitalize()}\n"
+        f"*Nombre:* {user[USUARIO_NOMBRE]}\n"
+        f"*Correo:* {user[USUARIO_EMAIL] or 'No registrado'}\n"
+        f"*Tipo:* {user[USUARIO_TIPO].capitalize()}\n"
     )
     
     # Añadir la carrera desde la tabla Usuarios
-    if 'Carrera' in user_dict and user_dict['Carrera']:
-        user_info += f"*Carrera:* {user_dict['Carrera']}\n\n"
+    if 'Carrera' in user_dict and user_dict[USUARIO_CARRERA]:
+        user_info += f"*Carrera:* {user_dict[USUARIO_CARRERA]}\n\n"
     else:
         user_info += "*Carrera:* No registrada\n\n"
     
@@ -124,24 +128,24 @@ def handle_ver_misdatos(message):
         for m in matriculas:
             # Convertir cada matrícula a diccionario si es necesario
             m_dict = dict(m) if hasattr(m, 'keys') else m
-            asignatura = m_dict.get('Asignatura', 'Desconocida')
+            asignatura = m_dict.get(MATRICULA_ASIGNATURA, 'Desconocida')
             user_info += f"- {asignatura}\n"
     else:
         user_info += "No tienes asignaturas matriculadas.\n"
     
     # Añadir horario si es profesor
-    if user['Tipo'] == 'profesor':
-        if 'Horario' in user_dict and user_dict['Horario']:
-            user_info += f"\n*Horario de tutorías:*\n{user_dict['Horario']}\n\n"
+    if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
+        if USUARIO_HORARIO in user_dict and user_dict[USUARIO_HORARIO]:
+            user_info += f"\n*Horario de tutorías:*\n{user_dict[USUARIO_HORARIO]}\n\n"
         
-        # NUEVA SECCIÓN: Mostrar salas creadas por el profesor        
-        # Consultar todas las salas creadas por este profesor  
-        salas = get_grupos_tutoria(Id_usuario=user['Id_usuario'])
-        print(salas)
-        salas.sort(key=lambda x: x["Fecha_creacion"], reverse=True)
+        # NUEVA SECCIÓN: Mostrar grupos creadas por el profesor        
+        # Consultar todas las grupos creadas por este profesor  
+        grupos = get_grupos_tutoria(GRUPO_ID_USUARIO=user[USUARIO_ID])
+        print(grupos)
+        grupos.sort(key=lambda x: x[GRUPO_FECHA], reverse=True)
         
-        if salas and len(salas) > 0:
-            user_info += "\n*🔵 Salas de tutoría creadas:*\n"
+        if grupos and len(grupos) > 0:
+            user_info += "\n*🔵 grupos de tutoría creadas:*\n"
             
             # Diccionario para traducir los propósitos a texto más amigable
             propositos = {
@@ -150,44 +154,44 @@ def handle_ver_misdatos(message):
                 'avisos': 'Canal de avisos'
             }
             
-            for sala in salas:
+            for grupo in grupos:
                 # Obtener propósito en formato legible
-                proposito = propositos.get(sala['Proposito_sala'], sala['Proposito_sala'] or 'General')
+                proposito = propositos.get(grupo[GRUPO_PROPOSITO], grupo[GRUPO_PROPOSITO] or 'General')
                 
                 # Obtener asignatura o indicar que es general
-                asignatura = sala['Asignatura'] or 'General'
+                asignatura = grupo[GRUPO_ASIGNATURA] or 'General'
                 
                 # Formato de fecha más amigable
-                fecha = sala['Fecha_creacion'].split(' ')[0] if sala['Fecha_creacion'] else 'Desconocida'
+                fecha = grupo[GRUPO_FECHA].split(' ')[0] if grupo[GRUPO_FECHA] else 'Desconocida'
                 
-                user_info += f"• *{sala['Nombre_sala']}*\n"
+                user_info += f"• *{grupo[GRUPO_NOMBRE]}*\n"
                 user_info += f"  📋 Propósito: {proposito}\n"
                 user_info += f"  📚 Asignatura: {asignatura}\n"
                 user_info += f"  📅 Creada: {fecha}\n\n"
         else:
-            user_info += "\n*🔵 No has creado salas de tutoría todavía.*\n"
-            user_info += "Usa /crear_ grupo _ tutoria para crear una nueva sala.\n"
+            user_info += "\n*🔵 No has creado grupos de tutoría todavía.*\n"
+            user_info += "Usa /crear_ grupo _ tutoria para crear una nueva grupo.\n"
     
     # Intentar enviar el mensaje con formato Markdown
     try:
         bot.send_message(chat_id, user_info, parse_mode="Markdown")
         
-        # Si es profesor y tiene salas, mostrar botones para editar
-        if user['Tipo'] == 'profesor' and salas and len(salas) > 0:
+        # Si es profesor y tiene grupos, mostrar botones para editar
+        if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR and grupos and len(grupos) > 0:
             markup = types.InlineKeyboardMarkup(row_width=1)
             
-            # Añadir SOLO botones para editar cada sala (quitar botones de eliminar)
-            for sala in salas:
-                sala_id = sala['id_sala']
+            # Añadir SOLO botones para editar cada grupo (quitar botones de eliminar)
+            for grupo in grupos:
+                grupo_id = grupo[GRUPO_ID]
                 
                 markup.add(types.InlineKeyboardButton(
-                    f"✏️ Sala: {sala['Nombre_sala']}",
-                    callback_data=f"edit_sala_{sala_id}"
+                    f"✏️ grupo: {grupo[GRUPO_NOMBRE]}",
+                    callback_data=f"edit_grupo_{grupo_id}"
                 ))
             
             bot.send_message(
                 chat_id,
-                "Selecciona una sala para gestionar:",
+                "Selecciona una grupo para gestionar:",
                 reply_markup=markup
             )
     except Exception as e:
@@ -198,7 +202,7 @@ def handle_ver_misdatos(message):
 # Importar y configurar los handlers desde los módulos
 from handlers.registro import register_handlers as register_registro_handlers
 from handlers.tutorias import register_handlers as register_tutorias_handlers
-from handlers.salas import register_handlers as register_salas_handlers
+from handlers.grupos import register_handlers as register_grupos_handlers
 from handlers.horarios import register_handlers as register_horarios_handlers
 from handlers.valoraciones import register_handlers as register_valoraciones_handlers
 
@@ -207,7 +211,7 @@ register_registro_handlers(bot)
 register_tutorias_handlers(bot)
 register_horarios_handlers(bot)
 register_valoraciones_handlers(bot)
-register_salas_handlers(bot)
+register_grupos_handlers(bot)
 
 def setup_polling():
     """Configura el polling para el bot y maneja errores"""

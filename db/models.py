@@ -25,12 +25,6 @@ def create_database():
         Horario TEXT     -- Añadida columna Horario para compatibilidad
     );
     
-    -- Tabla de Carreras
-    CREATE TABLE IF NOT EXISTS Carreras (
-        id_carrera INTEGER PRIMARY KEY AUTOINCREMENT,
-        Nombre_carrera TEXT NOT NULL UNIQUE
-    );
-    
     -- Tabla de Asignaturas
     CREATE TABLE IF NOT EXISTS Asignaturas (
         Id_asignatura INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,18 +60,6 @@ def create_database():
         FOREIGN KEY (Id_asignatura) REFERENCES Asignaturas(Id_asignatura)
     );
     
-    -- Tabla para miembros de grupos
-    CREATE TABLE IF NOT EXISTS Miembros_Grupo (
-        id_miembro INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_sala INTEGER,
-        Id_usuario INTEGER,
-        Fecha_union TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        Estado TEXT DEFAULT 'activo',
-        FOREIGN KEY (id_sala) REFERENCES Grupos_tutoria(id_sala),
-        FOREIGN KEY (Id_usuario) REFERENCES Usuarios(Id_usuario),
-        UNIQUE(id_sala, Id_usuario)
-    );
-    
     -- Tabla de Valoraciones
     CREATE TABLE IF NOT EXISTS Valoraciones (
         id_valoracion INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,16 +72,6 @@ def create_database():
         id_sala INTEGER,
         FOREIGN KEY (evaluador_id) REFERENCES Usuarios(Id_usuario),
         FOREIGN KEY (profesor_id) REFERENCES Usuarios(Id_usuario)
-    );
-    
-    -- Tabla de Horarios mejorada
-    CREATE TABLE IF NOT EXISTS Horarios_Profesores (
-        id_horario INTEGER PRIMARY KEY AUTOINCREMENT,
-        Id_usuario INTEGER NOT NULL,
-        dia TEXT NOT NULL,
-        hora_inicio TEXT NOT NULL,
-        hora_fin TEXT NOT NULL,
-        FOREIGN KEY (Id_usuario) REFERENCES Usuarios(Id_usuario)
     );
     ''')
     

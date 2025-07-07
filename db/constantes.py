@@ -1,0 +1,202 @@
+##=====================
+## ===== Usuarios =====
+##=====================
+
+# Constantes de campos válidos en la base de datos
+USUARIO_ID = "Id_usuario"
+USUARIO_NOMBRE = "Nombre"
+USUARIO_APELLIDOS = "Apellidos"
+USUARIO_DNI = "DNI"
+USUARIO_TIPO = "Tipo"
+USUARIO_EMAIL = "Email_UGR"
+USUARIO_ID_TELEGRAM = "TelegramID"
+USUARIO_REGISTRADO = "Registrado"
+USUARIO_AREA = "Area"
+USUARIO_CARRERA = "Carrera"
+USUARIO_HORARIO = "Horario"
+
+# Conjunto de campos válidos (para validación rápida)
+USUARIO_CAMPOS_VALIDOS = {
+    "USUARIO_ID",
+    "USUARIO_NOMBRE",
+    "USUARIO_APELLIDOS",
+    "USUARIO_DNI",
+    "USUARIO_TIPO",
+    "USUARIO_EMAIL",
+    "USUARIO_ID_TELEGRAM",
+    "USUARIO_REGISTRADO",
+    "USUARIO_AREA",
+    "USUARIO_CARRERA",
+    "USUARIO_HORARIO",
+}
+
+USUARIO_FIELDS = {
+    "USUARIO_ID":USUARIO_ID,
+    "USUARIO_NOMBRE":USUARIO_NOMBRE,
+    "USUARIO_APELLIDOS":USUARIO_APELLIDOS,
+    "USUARIO_DNI":USUARIO_DNI,
+    "USUARIO_TIPO":USUARIO_TIPO,
+    "USUARIO_EMAIL":USUARIO_EMAIL,
+    "USUARIO_ID_TELEGRAM":USUARIO_ID_TELEGRAM,
+    "USUARIO_REGISTRADO":USUARIO_REGISTRADO,
+    "USUARIO_AREA":USUARIO_AREA,
+    "USUARIO_CARRERA":USUARIO_CARRERA,
+    "USUARIO_HORARIO":USUARIO_HORARIO,
+}
+
+# Posibles valores campos
+USUARIO_TIPO_PROFESOR = "profesor"
+USUARIO_TIPO_ESTUDIANTE = "estudiante"
+USUARIO_SI_REGISTRADO = "SI"
+USUARIO_NO_REGISTRADO = "NO"
+
+
+##========================
+## ===== Asignaturas =====
+##========================
+
+# Constantes de campos de la tabla ASIGNATURAS
+ASIGNATURA_ID = "Id_asignatura"
+ASIGNATURA_NOMBRE = "Nombre"
+ASIGNATURA_CODIGO = "Codigo_Asignatura"
+ASIGNATURA_ID_CARRERA = "Id_carrera"
+
+# Conjunto de campos válidos (para validación)
+ASIGNATURA_CAMPOS_VALIDOS = {
+    "ASIGNATURA_ID",
+    "ASIGNATURA_NOMBRE",
+    "ASIGNATURA_CODIGO",
+    "ASIGNATURA_ID_CARRERA"
+}
+
+ASIGNATURA_FIELDS = { 
+    "ASIGNATURA_ID":ASIGNATURA_ID,
+    "ASIGNATURA_NOMBRE":ASIGNATURA_NOMBRE,
+    "ASIGNATURA_CODIGO":ASIGNATURA_CODIGO,
+    "ASIGNATURA_ID_CARRERA":ASIGNATURA_ID_CARRERA,
+}
+
+
+##===========================
+## ===== Grupos_tutoria =====
+##===========================
+
+# Constantes de campos de la tabla GRUPOS o SALAS
+GRUPO_ID = "id_sala"
+GRUPO_ID_USUARIO = "Id_usuario"
+GRUPO_NOMBRE = "Nombre_sala"
+GRUPO_TIPO = "Tipo_sala"
+GRUPO_ID_ASIGNATURA = "Id_asignatura"
+GRUPO_ID_CHAT = "Chat_id"
+GRUPO_ENLACE = "Enlace_invitacion"
+GRUPO_PROPOSITO = "Proposito_sala"
+GRUPO_PROFESOR = "Profesor"
+GRUPO_ASIGNATURA = "Asignatura"
+GRUPO_FECHA = "Fecha_creacion"
+
+# Conjunto de campos válidos para validación
+GRUPO_CAMPOS_VALIDOS = {
+    "GRUPO_ID",
+    "GRUPO_ID_USUARIO",
+    "GRUPO_NOMBRE",
+    "GRUPO_TIPO",
+    "GRUPO_ID_ASIGNATURA",
+    "GRUPO_ID_CHAT",
+    "GRUPO_ENLACE",
+    "GRUPO_PROPOSITO",
+}
+
+GRUPO_FIELDS = {           
+    "GRUPO_ID":GRUPO_ID,
+    "GRUPO_ID_USUARIO":GRUPO_ID_USUARIO,
+    "GRUPO_NOMBRE":GRUPO_NOMBRE,
+    "GRUPO_TIPO":GRUPO_TIPO,
+    "GRUPO_ID_ASIGNATURA":GRUPO_ID_ASIGNATURA,
+    "GRUPO_ID_CHAT":GRUPO_ID_CHAT,
+    "GRUPO_ENLACE":GRUPO_ENLACE,
+    "GRUPO_PROPOSITO":GRUPO_PROPOSITO,
+}
+
+# Posibles valores campos
+GRUPO_PUBLICO = "pública"
+GRUPO_PRIVADO = "privada"
+
+
+
+##=======================
+## ===== Matriculas =====
+##=======================
+
+# Constantes de campos de la tabla MATRICULAS
+MATRICULA_ID = "id_matricula"
+MATRICULA_ID_USUARIO = "Id_usuario"
+MATRICULA_ID_ASIGNATURA = "Id_asignatura"
+MATRICULA_CURSO = "Curso"
+MATRICULA_TIPO = "Tipo"
+MATRICULA_ASIGNATURA= "Asignatura"
+MATRICULA_CODIGO= "Codigo"
+MATRICULA_CARRERA= "Carrera"
+
+# Conjunto de campos válidos para validación
+MATRICULA_CAMPOS_VALIDOS = {
+    "MATRICULA_ID",
+    "MATRICULA_ID_USUARIO",
+    "MATRICULA_ID_ASIGNATURA",
+    "MATRICULA_CURSO",
+    "MATRICULA_TIPO",
+}
+
+MATRICULA_FIELDS = {           
+    "MATRICULA_ID":MATRICULA_ID,
+    "MATRICULA_ID_USUARIO":MATRICULA_ID_USUARIO,
+    "MATRICULA_ID_ASIGNATURA":MATRICULA_ID_ASIGNATURA,
+    "MATRICULA_CURSO":MATRICULA_CURSO,
+    "MATRICULA_TIPO":MATRICULA_TIPO,
+}
+
+# Posibles valores campos
+MATRICULA_ALUMNO = "estudiante"
+MATRICULA_PROFESOR = "docente"
+
+
+
+##=========================
+## ===== Valoraciones =====
+##=========================
+
+# Constantes de campos de la tabla VALORACIONES
+VALORACION_ID = "Id_usuario"
+VALORACION_EVALUADOR_ID = "evaluador_id"
+VALORACION_PROFESOR_ID = "profesor_id"
+VALORACION_PUNTUACION = "puntuacion"
+VALORACION_COMENTARIO = "comentario"
+VALORACION_FECHA = "fecha"
+VALORACION_ES_ANONIMO = "es_anonimo"
+VALORACION_ID_SALA = "id_sala"
+
+# Conjunto de campos válidos (para validación)
+VALORACION_CAMPOS_VALIDOS = {
+    "VALORACION_ID",
+    "VALORACION_EVALUADOR_ID",
+    "VALORACION_PROFESOR_ID",
+    "VALORACION_PUNTUACION",
+    "VALORACION_COMENTARIO",
+    "VALORACION_FECHA",
+    "VALORACION_ES_ANONIMO",
+    "VALORACION_ID_SALA",
+}
+
+VALORACION_FIELDS = { 
+    "VALORACION_ID":VALORACION_ID,
+    "VALORACION_EVALUADOR_ID":VALORACION_EVALUADOR_ID,
+    "VALORACION_PROFESOR_ID":VALORACION_PROFESOR_ID,
+    "VALORACION_PUNTUACION":VALORACION_PUNTUACION,
+    "VALORACION_COMENTARIO":VALORACION_COMENTARIO,
+    "VALORACION_FECHA":VALORACION_FECHA,
+    "VALORACION_ES_ANONIMO":VALORACION_ES_ANONIMO,
+    "VALORACION_ID_SALA":VALORACION_ID_SALA,
+}
+
+# Posibles valores campos
+VALORACION_ANONIMA = True
+VALORACION_NO_ANONIMA = False

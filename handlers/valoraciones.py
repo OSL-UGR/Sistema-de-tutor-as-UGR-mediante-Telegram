@@ -11,6 +11,7 @@ from utils.state_manager import clear_state, get_state, user_data
 # Añadir directorio padre al path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db.queries import get_matriculas, get_usuarios_by_multiple_ids, insert_valoracion, get_usuarios
+from db.constantes import *
 
 def register_handlers(bot):
     """Registra todos los handlers relacionados con valoraciones"""
@@ -19,7 +20,7 @@ def register_handlers(bot):
     def handle_valorar_profesor(message):
         """Maneja el comando para valorar a un profesor"""
         chat_id = message.chat.id
-        user = get_usuarios(TelegramID=message.from_user.id)[0]
+        user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)[0]
         
         if not user:
             bot.send_message(
@@ -28,7 +29,7 @@ def register_handlers(bot):
             )
             return
             
-        if user['Tipo'] != 'estudiante':
+        if user[USUARIO_TIPO] != USUARIO_TIPO_ESTUDIANTE:
             bot.send_message(
                 chat_id,
                 "❌ Solo los estudiantes pueden valorar a profesores."
@@ -37,18 +38,18 @@ def register_handlers(bot):
         
         # Buscar profesores disponibles para valorar        
         # Obtener profesores de las asignaturas del estudiante
-        matriculas = get_matriculas(Id_usuario=user['Id_usuario'])
+        matriculas = get_matriculas(MATRICULA_ID_USUARIO=user[USUARIO_ID])
         ids_asignaturas = []
         
         for matricula in matriculas:
-            ids_asignaturas.append(matricula['Id_asignatura'])
+            ids_asignaturas.append(matricula[MATRICULA_ID_ASIGNATURA])
 
-        matriculas_profesores = get_matriculas(Tipo="docente")
+        matriculas_profesores = get_matriculas(MATRICULA_TIPO=MATRICULA_PROFESOR)
         ids_profesores = []
 
         for matricula in matriculas_profesores:
-            if matricula['Id_asignatura'] in ids_asignaturas:
-                ids_profesores.append(matricula['Id_usuario'])
+            if matricula[MATRICULA_ID_ASIGNATURA] in ids_asignaturas:
+                ids_profesores.append(matricula[MATRICULA_ID_USUARIO])
         
         profesores = get_usuarios_by_multiple_ids(ids_profesores)
         
@@ -65,8 +66,8 @@ def register_handlers(bot):
         
         for prof in profesores:
             markup.add(types.InlineKeyboardButton(
-                text=prof['Nombre'],
-                callback_data=f"valorar_{prof['Id_usuario']}"
+                text=prof[USUARIO_NOMBRE],
+                callback_data=f"valorar_{prof[USUARIO_ID]}"
             ))
         
         bot.send_message(
@@ -83,9 +84,9 @@ def register_handlers(bot):
         profesor_id = int(call.data.split("_")[1])
         
         # Obtener datos del profesor
-        profesor = get_usuarios(Id_usuario=profesor_id)[0]
+        profesor = get_usuarios(USUARIO_ID=profesor_id)[0]
         
-        user_data[chat_id] = {"profesor_id": profesor_id, "profesor_nombre": profesor['Nombre']}
+        user_data[chat_id] = {"profesor_id": profesor_id, "profesor_nombre": profesor[USUARIO_NOMBRE]}
         
         # Solicitar puntuación
         markup = types.InlineKeyboardMarkup(row_width=5)
@@ -101,7 +102,7 @@ def register_handlers(bot):
         bot.edit_message_text(
             chat_id=chat_id,
             message_id=call.message.message_id,
-            text=f"Vas a valorar a: *{profesor['Nombre']}*\n\n¿Qué puntuación le darías del 1 al 5?",
+            text=f"Vas a valorar a: *{profesor[USUARIO_NOMBRE]}*\n\n¿Qué puntuación le darías del 1 al 5?",
             reply_markup=markup,
             parse_mode="Markdown"
         )
@@ -196,13 +197,13 @@ def register_handlers(bot):
         
         # Guardar valoración en la base de datos
         try:
-            evaluador_id = get_usuarios(TelegramID=call.from_user.id)[0]['Id_usuario']
+            evaluador_id = get_usuarios(USUARIO_ID_TELEGRAM=call.from_user.id)[0][USUARIO_ID]
             profesor_id = user_data[chat_id]["profesor_id"]
             puntuacion = user_data[chat_id]["puntuacion"]
             comentario = user_data[chat_id].get("comentario", "")
             fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            insert_valoracion(evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, user_data[chat_id].get("sala_id"))
+            insert_valoracion(evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, user_data[chat_id].get("grupo_id"))
             
             bot.edit_message_text(
                 chat_id=chat_id,
@@ -226,19 +227,19 @@ def register_handlers(bot):
         bot.answer_callback_query(call.id)
         
 # Al final del archivo, añade esta función para que sea importable desde otros módulos
-def iniciar_valoracion_profesor(bot, profesor_id, estudiante_id, sala_id=None):
+def iniciar_valoracion_profesor(bot, profesor_id, estudiante_id, grupo_id=None):
     """Inicia el proceso de valoración de un profesor desde otro módulo"""
     # Buscar usuario por id
-    estudiante = get_usuarios(Id_usuario=estudiante_id)[0]
+    estudiante = get_usuarios(USUARIO_ID=estudiante_id)[0]
     
     # Si no hay TelegramID, no podemos enviar mensaje
-    if not estudiante or not estudiante.get('TelegramID'):
+    if not estudiante or not estudiante.get(USUARIO_ID_TELEGRAM):
         return False
     
-    chat_id = estudiante['TelegramID']
+    chat_id = estudiante[USUARIO_ID_TELEGRAM]
     
     # Obtener datos del profesor
-    profesor = get_usuarios(Id_usuario=profesor_id)[0]
+    profesor = get_usuarios(USUARIO_ID=profesor_id)[0]
     
     if not profesor:
         bot.send_message(chat_id, "❌ Profesor no encontrado")
@@ -247,9 +248,9 @@ def iniciar_valoracion_profesor(bot, profesor_id, estudiante_id, sala_id=None):
     # Guardar datos para el flujo de valoración
     user_data[chat_id] = {
         "profesor_id": profesor_id, 
-        "profesor_nombre": profesor['Nombre'],
+        "profesor_nombre": profesor[USUARIO_NOMBRE],
         "estudiante_id": estudiante_id,
-        "sala_id": sala_id
+        "grupo_id": grupo_id
     }
     
     # Mostrar opciones de valoración (con estrellas)
@@ -266,7 +267,7 @@ def iniciar_valoracion_profesor(bot, profesor_id, estudiante_id, sala_id=None):
     # Enviar nuevo mensaje
     bot.edit_message_text(
         chat_id=chat_id,
-        text=f"Vas a valorar la tutoría con: *{profesor['Nombre']}*\n\n¿Qué puntuación le darías?",
+        text=f"Vas a valorar la tutoría con: *{profesor[USUARIO_NOMBRE]}*\n\n¿Qué puntuación le darías?",
         reply_markup=markup,
         parse_mode="Markdown"
     )
