@@ -9,6 +9,9 @@ from db.db import close_connection
 from db.queries import get_grupos_tutoria, get_matriculas, get_usuarios
 from db.constantes import *
 
+COMMAND_HELP = "help"
+COMMAND_VER_MIS_DATOS = "ver_misdatos"
+
 # Reemplaza todos los handlers universales por este ÚNICO handler al final
 # Inicializar el bot de Telegram
 bot = telebot.TeleBot(BOT_TOKEN) 
@@ -28,13 +31,13 @@ def setup_commands():
     """Configura los comandos que aparecen en el menú del bot"""
     try:
         bot.set_my_commands([
-            telebot.types.BotCommand("/start", "Inicia el bot y el registro"),
-            telebot.types.BotCommand("/help", "Muestra la ayuda del bot"),
-            telebot.types.BotCommand("/tutoria", "Ver profesores disponibles para tutoría"),
-            telebot.types.BotCommand("/valorar_profesor", "Valora un profesor"),
-            telebot.types.BotCommand("/crear_grupo_tutoria", "Crea un grupo de tutoría"),
-            telebot.types.BotCommand("/configurar_horario", "Configura tu horario de tutorías"),
-            telebot.types.BotCommand("/ver_misdatos", "Ver tus datos registrados")
+            telebot.types.BotCommand(f"/{COMMAND_START}", "Inicia el bot y el registro"),
+            telebot.types.BotCommand(f"/{COMMAND_HELP}", "Muestra la ayuda del bot"),
+            telebot.types.BotCommand(f"/{COMMAND_TUTORIA}", "Ver profesores disponibles para tutoría"),
+            telebot.types.BotCommand(f"/{COMMAND_VALORAR_PROFESOR}", "Valora un profesor"),
+            telebot.types.BotCommand(f"/{COMMAND_CREAR_GRUPO_TUTORIA}", "Crea un grupo de tutoría"),
+            telebot.types.BotCommand(f"/{COMMAND_CONFIGURAR_HORARIO}", "Configura tu horario de tutorías"),
+            telebot.types.BotCommand(f"/{COMMAND_VER_MIS_DATOS}", "Ver tus datos registrados")
         ])
         print("✅ Comandos del bot configurados correctamente")
         return True
@@ -42,7 +45,7 @@ def setup_commands():
         print(f"❌ Error al configurar los comandos del bot: {e}")
         return False
 
-@bot.message_handler(commands=['help'])
+@bot.message_handler(commands=[COMMAND_HELP])
 def handle_help(message):
     """Muestra la ayuda del bot"""
     chat_id = message.chat.id
@@ -51,28 +54,28 @@ def handle_help(message):
     if not user:
         bot.send_message(
             chat_id,
-            "❌ No estás registrado. Usa /start para registrarte."
+            f"❌ No estás registrado. Usa /{COMMAND_START} para registrarte."
         )
         return
     user = user[0]
     
     help_text = (
         "🤖 *Comandos disponibles:*\n\n"
-        "/start - Inicia el bot y el proceso de registro\n"
-        "/help - Muestra este mensaje de ayuda\n"
+        f"/{COMMAND_START} - Inicia el bot y el proceso de registro\n"
+        f"/{COMMAND_HELP} - Muestra este mensaje de ayuda\n"
         
     )
     if user[USUARIO_TIPO] == USUARIO_TIPO_ESTUDIANTE:
         help_text += (
-            "/tutoria - Ver profesores disponibles para tutoría\n"
-            "/ver_misdatos - Ver tus datos registrados\n"
-            "/valorar_profesor - Dar una valoración a un profesor\n"
+            f"/{COMMAND_TUTORIA} - Ver profesores disponibles para tutoría\n"
+            f"/{COMMAND_VER_MIS_DATOS} - Ver tus datos registrados\n"
+            f"/{COMMAND_VALORAR_PROFESOR} - Dar una valoración a un profesor\n"
         )
 
     if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
         help_text += (
-            "/configurar_horario - Configura tu horario de tutorías\n"
-            "/crear_grupo_tutoria - Crea un grupo de tutoría\n"
+            f"/{COMMAND_CONFIGURAR_HORARIO} - Configura tu horario de tutorías\n"
+            f"/{COMMAND_CREAR_GRUPO_TUTORIA} - Crea un grupo de tutoría\n"
         )
     
     # Escapar los guiones bajos para evitar problemas de formato
@@ -85,7 +88,7 @@ def handle_help(message):
         # Si falla, envía sin formato
         bot.send_message(chat_id, help_text.replace('*', ''), parse_mode=None)
 
-@bot.message_handler(commands=['ver_misdatos'])
+@bot.message_handler(commands=[COMMAND_VER_MIS_DATOS])
 def handle_ver_misdatos(message):
     chat_id = message.chat.id
     print(f"\n\n### INICIO VER_MISDATOS - Usuario: {message.from_user.id} ###")
@@ -95,7 +98,7 @@ def handle_ver_misdatos(message):
     
     if not user:
         print("⚠️ Usuario no encontrado en BD")
-        bot.send_message(chat_id, "❌ No estás registrado. Usa /start para registrarte.")
+        bot.send_message(chat_id, f"❌ No estás registrado. Usa /{COMMAND_START} para registrarte.")
         return
     
     user = user[0]
@@ -186,7 +189,7 @@ def handle_ver_misdatos(message):
                 
                 markup.add(types.InlineKeyboardButton(
                     f"✏️ grupo: {grupo[GRUPO_NOMBRE]}",
-                    callback_data=f"edit_grupo_{grupo_id}"
+                    callback_data=f"{EDIT_GRUPO}{grupo_id}"
                 ))
             
             bot.send_message(
@@ -200,11 +203,11 @@ def handle_ver_misdatos(message):
         bot.send_message(chat_id, user_info.replace('*', ''), parse_mode=None)
 
 # Importar y configurar los handlers desde los módulos
-from handlers.registro import register_handlers as register_registro_handlers
-from handlers.tutorias import register_handlers as register_tutorias_handlers
-from handlers.grupos import register_handlers as register_grupos_handlers
-from handlers.horarios import register_handlers as register_horarios_handlers
-from handlers.valoraciones import register_handlers as register_valoraciones_handlers
+from handlers.registro import COMMAND_START, register_handlers as register_registro_handlers
+from handlers.tutorias import COMMAND_TUTORIA, register_handlers as register_tutorias_handlers
+from handlers.grupos import COMMAND_CREAR_GRUPO_TUTORIA, EDIT_GRUPO, register_handlers as register_grupos_handlers
+from handlers.horarios import COMMAND_CONFIGURAR_HORARIO, register_handlers as register_horarios_handlers
+from handlers.valoraciones import COMMAND_VALORAR_PROFESOR, register_handlers as register_valoraciones_handlers
 
 # Registrar todos los handlers
 register_registro_handlers(bot)

@@ -8,8 +8,12 @@ import os
 import sys
 import logging
 from dotenv import load_dotenv
+from telebot import types
+
 
 # Importar utilidades y handlers
+from handlers_grupo.registro import COMMAND_CONFIGURAR_GRUPO
+from handlers_grupo.tutorias import COMMAND_FINALIZAR
 from handlers_grupo.utils import (
     menu_profesor, menu_estudiante, 
     configurar_logger, limpieza_periodica
@@ -20,7 +24,7 @@ logger = configurar_logger()
 
 # Cargar token del bot de grupos
 base_dir = os.path.dirname(os.path.abspath(__file__))
-env_path = os.path.join(base_dir, "datos.env.txt")
+env_path = os.path.join(base_dir, "datos.env")
 
 if os.path.exists(env_path):
     load_dotenv(dotenv_path=env_path)
@@ -51,6 +55,9 @@ import socket
 import sys
 import atexit
 
+COMMAND_START = "start"
+COMMAND_HELP = "help"
+
 def prevent_duplicate_instances(port=12345):
     """Evita que se ejecuten múltiples instancias del bot usando un socket de bloqueo"""
     global lock_socket
@@ -76,7 +83,7 @@ from db.queries import get_grupos_tutoria, get_usuarios
 from db.constantes import *
 
 # Handlers básicos
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=[COMMAND_START])
 def send_welcome(message):
     chat_id = message.chat.id
     user_id = message.from_user.id
@@ -142,21 +149,19 @@ def send_welcome(message):
     
     logger.info(f"Usuario {user_id} ({user[USUARIO_NOMBRE]}) ha iniciado el bot en chat {chat_id}")
 
-@bot.message_handler(commands=['help'])
+@bot.message_handler(commands=[COMMAND_HELP])
 def help_handler(message):
     chat_id = message.chat.id
-    grupo = get_grupos_tutoria(GRUPO_ID_CHAT=chat_id)
-    if (grupo and grupo[0][GRUPO_TIPO] == GRUPO_PRIVADO):
-        bot.send_message(
-            chat_id,
-            "ℹ️ *Ayuda del Bot*\n\n"
-            "🔹 Usa los siguientes comandos para interactuar con el bot:\n"
-            "✅ /help - Muestra este mensaje de ayuda.\n"
-            "✅ /finalizar o Pulsa el botón '❌ Terminar Tutoria' para finalizar tu consulta o expulsar a un estudiante (solo para profesores).\n"
-            "✅ /start - Almacena tus datos y te da la bienvenida si eres estudiante.",
-            parse_mode="Markdown"
-        )
-        logger.info(f"Mensaje de ayuda enviado a {chat_id}")
+    bot.send_message(
+        chat_id,
+        "ℹ️ *Ayuda del Bot*\n\n"
+        "🔹 Usa los siguientes comandos para interactuar con el bot:\n"
+        f"✅ /{COMMAND_START} - Almacena tus datos y te da la bienvenida si eres estudiante.\n"
+        f"✅ /{COMMAND_HELP} - Muestra este mensaje de ayuda.\n"
+        f"✅ /{COMMAND_FINALIZAR} o Pulsa el botón '❌ Terminar Tutoria' para finalizar la tutoria actual.\n",
+        parse_mode="Markdown"
+    )
+    logger.info(f"Mensaje de ayuda enviado a {chat_id}")
 
 # Iniciar hilo de limpieza periódica
 # Reemplazar la función configurar_grupo actual con esta versión mejorada:
@@ -205,6 +210,21 @@ def handle_bot_status_update(update):
         traceback.print_exc()
 
 
+def setup_commands():
+    """Configura los comandos que aparecen en el menú del bot"""
+    try:
+        bot.set_my_commands([
+            types.BotCommand(f'/{COMMAND_START}', 'Iniciar el bot'),
+            types.BotCommand(f'/{COMMAND_CONFIGURAR_GRUPO}', 'Configuración inicial del grupo'),
+            types.BotCommand(f'/{COMMAND_HELP}', 'Mostrar ayuda del bot'),
+            types.BotCommand(f'/{COMMAND_FINALIZAR}', 'Finalizar una sesión de tutoría'),
+        ])
+        print("✅ Comandos del bot configurados correctamente")
+        return True
+    except Exception as e:
+        print(f"❌ Error al configurar los comandos del bot: {e}")
+        return False
+
 # Registrar handlers externos
 if __name__ == "__main__":
     print("\n==================================================")
@@ -218,6 +238,8 @@ if __name__ == "__main__":
     limpieza_thread = threading.Thread(target=limpieza_periodica)
     limpieza_thread.daemon = True
     limpieza_thread.start()
+
+    setup_commands()
     
     try:
         # Registrar handlers de usuarios primero para darle prioridad

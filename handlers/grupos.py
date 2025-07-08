@@ -13,7 +13,16 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', filename='logs/grupos.log')
 
-import traceback
+COMMAND_CREAR_GRUPO_TUTORIA = 'crear_grupo_tutoria'
+
+# Calldata
+EDIT_GRUPO = "edit_grupo_"
+CANCELAR_EDICION = "cancelar_edicion_"
+ELIMINAR_GRUPO = "eliminar_grupo_"
+CONFIRMAR_ELIMINAR = "confirmar_eliminar_"
+VER_GRUPOS = "ver_grupos"
+VOLVER_INSTRUCCIONES = "volver_instrucciones"
+FAQ_GRUPO = "faq_grupo"
 
 def escape_markdown(text):
     """Escapa caracteres especiales de Markdown"""
@@ -28,7 +37,7 @@ def escape_markdown(text):
 
 def register_handlers(bot):
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("edit_grupo_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(EDIT_GRUPO))
     def handle_edit_grupo(call):
         """Muestra opciones para editar una grupo"""
         chat_id = call.message.chat.id
@@ -65,14 +74,14 @@ def register_handlers(bot):
             # Añadir opción para eliminar la grupo
             markup.add(types.InlineKeyboardButton(
                 "🗑️ Eliminar grupo",
-                callback_data=f"eliminargrupo_{grupo_id}"
+                callback_data=f"{ELIMINAR_GRUPO}{grupo_id}"
             ))
-            print(f"  ✓ Botón eliminar con callback: eliminargrupo_{grupo_id}")
+            print(f"  ✓ Botón eliminar con callback: {ELIMINAR_GRUPO}{grupo_id}")
 
             # Botón para cancelar
             markup.add(types.InlineKeyboardButton(
                 "❌ Cancelar",
-                callback_data=f"cancelar_edicion_{grupo_id}"
+                callback_data=f"{CANCELAR_EDICION}{grupo_id}"
             ))
 
             # Preparar textos seguros para Markdown
@@ -102,7 +111,7 @@ def register_handlers(bot):
         print(f"### FIN EDIT_grupo - Callback: {call.data} ###\n")
 
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("cancelar_edicion_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(CANCELAR_EDICION))
     def handle_cancelar_edicion(call):
         """Cancela la edición de la grupo"""
         bot.edit_message_text(
@@ -113,7 +122,7 @@ def register_handlers(bot):
         bot.answer_callback_query(call.id)
 
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("eliminargrupo_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(ELIMINAR_GRUPO))
     def handle_eliminar_grupo(call):
         """Maneja la solicitud de eliminación de una grupo"""
         chat_id = call.message.chat.id
@@ -151,12 +160,12 @@ def register_handlers(bot):
 
             markup.add(types.InlineKeyboardButton(
                 "✅ Sí, eliminar esta grupo",
-                callback_data=f"confirmar_eliminar_{grupo_id}"
+                callback_data=f"{CONFIRMAR_ELIMINAR}{grupo_id}"
             ))
 
             markup.add(types.InlineKeyboardButton(
                 "❌ No, cancelar",
-                callback_data=f"cancelar_edicion_{grupo_id}"
+                callback_data=f"{CANCELAR_EDICION}{grupo_id}"
             ))
 
             # Enviar mensaje de confirmación
@@ -180,7 +189,7 @@ def register_handlers(bot):
         print("### FIN ELIMINAR_grupo ###")
 
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("confirmar_eliminar_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(CONFIRMAR_ELIMINAR))
     def handle_confirmar_eliminar(call):
         """Confirma y ejecuta la eliminación de la grupo"""
         chat_id = call.message.chat.id
@@ -244,7 +253,7 @@ def register_handlers(bot):
         print("### FIN CONFIRMAR_ELIMINAR ###")
 
 
-    @bot.callback_query_handler(func=lambda call: call.data == "ver_grupos")
+    @bot.callback_query_handler(func=lambda call: call.data == VER_GRUPOS)
     def handler_ver_grupos(call):
         """Muestra las grupos actuales del usuario"""
         chat_id = call.message.chat.id
@@ -274,9 +283,9 @@ def register_handlers(bot):
 
             # Diccionario para traducir los propósitos a texto más amigable
             propositos = {
-                'individual': 'Tutorías individuales',
-                'grupal': 'Tutorías grupales',
-                'avisos': 'Canal de avisos'
+                GRUPO_PROPOSITO_INDIVIDUAL: 'Tutorías individuales',
+                GRUPO_PROPOSITO_GRUPAL: 'Tutorías grupales',
+                GRUPO_PROPOSITO_AVISOS: 'Canal de avisos'
             }
 
             for grupo in grupos:
@@ -311,7 +320,7 @@ def register_handlers(bot):
                 
                     markup.add(types.InlineKeyboardButton(
                         f"✏️ grupo: {grupo[GRUPO_NOMBRE]}",
-                        callback_data=f"edit_grupo_{grupo_id}"
+                        callback_data=f"{EDIT_GRUPO}{grupo_id}"
                     ))
             
                 bot.send_message(
@@ -329,7 +338,7 @@ def register_handlers(bot):
         print("### FIN VER_grupoS CALLBACK ###\n\n")
 
 
-    @bot.message_handler(commands=['crear_grupo_tutoria'])
+    @bot.message_handler(commands=[COMMAND_CREAR_GRUPO_TUTORIA])
     def crear_grupo(message):
         """Proporciona instrucciones para crear un grupo de tutoría en Telegram"""
         chat_id = message.chat.id
@@ -379,11 +388,11 @@ def register_handlers(bot):
         markup.add(
             types.InlineKeyboardButton(
                 "📝 Ver mis grupos actuales",
-                callback_data="ver_grupos"  # Simplificado
+                callback_data=VER_GRUPOS  # Simplificado
             ),
             types.InlineKeyboardButton(
                 "❓ Preguntas frecuentes",
-                callback_data="faq_grupo"  # Simplificado
+                callback_data=FAQ_GRUPO  # Simplificado
             )
         )
 
@@ -404,7 +413,7 @@ def register_handlers(bot):
             )
 
 
-    @bot.callback_query_handler(func=lambda call: call.data == "volver_instrucciones")
+    @bot.callback_query_handler(func=lambda call: call.data == VOLVER_INSTRUCCIONES)
     def handler_volver_instrucciones(call):
         """Vuelve a mostrar las instrucciones originales"""
         chat_id = call.message.chat.id
@@ -435,7 +444,7 @@ def register_handlers(bot):
                     self.text = text
 
             # Crear el mensaje simplificado
-            msg = SimpleMessage(chat_id, user_id, '/crear_grupo_tutoria')
+            msg = SimpleMessage(chat_id, user_id, f'/{COMMAND_CREAR_GRUPO_TUTORIA}')
 
             # Llamar directamente a la función
             print("🔄 Llamando a crear_grupo...")
@@ -446,12 +455,12 @@ def register_handlers(bot):
             import traceback
             print("📋 Traza de error completa:")
             traceback.print_exc()
-            bot.send_message(chat_id, "❌ Error al volver a las instrucciones. Intenta usar /crear_grupo_tutoria directamente.")
+            bot.send_message(chat_id, f"❌ Error al volver a las instrucciones. Intenta usar /{COMMAND_CREAR_GRUPO_TUTORIA} directamente.")
 
         print("### FIN VOLVER_INSTRUCCIONES CALLBACK ###\n\n")
 
     # Handlers para los botones simplificados
-    @bot.callback_query_handler(func=lambda call: call.data == "faq_grupo")
+    @bot.callback_query_handler(func=lambda call: call.data == FAQ_GRUPO)
     def handler_faq_grupo(call):
         """Muestra preguntas frecuentes sobre creación de grupos"""
         chat_id = call.message.chat.id
@@ -495,7 +504,7 @@ def register_handlers(bot):
 
         # Botón para volver a las instrucciones
         markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(types.InlineKeyboardButton("🔙 Volver", callback_data="volver_instrucciones"))
+        markup.add(types.InlineKeyboardButton("🔙 Volver", callback_data=VOLVER_INSTRUCCIONES))
         print("✅ Markup de botones creado")
 
         try:

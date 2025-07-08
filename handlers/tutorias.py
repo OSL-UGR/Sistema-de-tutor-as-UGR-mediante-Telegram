@@ -22,6 +22,18 @@ from db.queries import (
 )
 from db.constantes import *
 
+COMMAND_TUTORIA ='tutoria'
+
+# Calldata
+SOLICITAR_GRUPO = "solicitar_grupo_"
+APROBAR_TUTORIA = "aprobar_tutoria_"
+RECHAZAR_TUTORIA = "rechazar_tutoria_"
+
+
+#Campos estructuras internas de datos
+
+GENERAL = "general"
+
 # Añadir la función directamente en este archivo
 def escape_markdown(text: str) -> str:
     """Escapa caracteres especiales de Markdown para evitar errores de formato"""
@@ -43,7 +55,7 @@ def escape_markdown(text: str) -> str:
 def register_handlers(bot):
     """Registra todos los handlers de tutorías"""
     
-    @bot.message_handler(commands=['tutoria'])
+    @bot.message_handler(commands=[COMMAND_TUTORIA])
     def handle_tutoria_command(message):
         """Muestra profesores y grupos disponibles para las asignaturas del estudiante"""
         chat_id = message.chat.id
@@ -106,11 +118,11 @@ def register_handlers(bot):
         for profesor in profesores_raw:
             prof_id = profesor[USUARIO_ID]
             profesores[prof_id] = {
-                'id': prof_id,
-                'nombre': f"{profesor[USUARIO_NOMBRE]} {profesor[USUARIO_APELLIDOS] or ''}".strip(),
-                'email': profesor[USUARIO_EMAIL],
-                'horario': profesor[USUARIO_HORARIO] or 'No especificado',
-                'matriculas': {}
+                USUARIO_ID: prof_id,
+                USUARIO_NOMBRE: f"{profesor[USUARIO_NOMBRE]} {profesor[USUARIO_APELLIDOS] or ''}".strip(),
+                USUARIO_EMAIL: profesor[USUARIO_EMAIL],
+                USUARIO_HORARIO: profesor[USUARIO_HORARIO] or 'No especificado',
+                MATRICULAS: {}
             }
         
         # Obtener asignaturas por profesor (basado en matrículas de tipo 'docente' y en grupos creados)
@@ -125,20 +137,20 @@ def register_handlers(bot):
             
             for asig in asignaturas_alumno_profesor:
                 if asig[MATRICULA_ID_ASIGNATURA] is not None:  # Si la asignatura existe
-                    profesores[profesor_id]['matriculas'][asig[MATRICULA_ID_ASIGNATURA]] = {
-                        'id': asig[MATRICULA_ID_ASIGNATURA],
-                        'nombre': asig[MATRICULA_ASIGNATURA],
-                        'codigo': asig[MATRICULA_CODIGO],
-                        'grupos': []
+                    profesores[profesor_id][MATRICULAS][asig[MATRICULA_ID_ASIGNATURA]] = {
+                        ASIGNATURA_ID: asig[MATRICULA_ID_ASIGNATURA],
+                        ASIGNATURA_NOMBRE: asig[MATRICULA_ASIGNATURA],
+                        ASIGNATURA_CODIGO: asig[MATRICULA_CODIGO],
+                        GRUPOS: []
 
                     }
         
         # Inicializar la categoría general para cada profesor
         for profesor_id in profesores:
-            profesores[profesor_id]['matriculas']['general'] = {
-                'id': 'general',
-                'nombre': 'General',
-                'grupos': []
+            profesores[profesor_id][MATRICULAS][GENERAL] = {
+                ASIGNATURA_ID: GENERAL,
+                ASIGNATURA_NOMBRE: 'General',
+                GRUPOS: []
             }
         
         # Obtener todas las grupos de cada profesor
@@ -148,31 +160,31 @@ def register_handlers(bot):
             
             # Clasificar las grupos por asignatura
             for grupo in grupos:
-                grupo_data = {
-                    'id': grupo[GRUPO_ID],
-                    'nombre': grupo[GRUPO_NOMBRE],
-                    'proposito': grupo[GRUPO_PROPOSITO],
-                    'tipo': grupo[GRUPO_TIPO],
-                    'enlace': grupo[GRUPO_ENLACE],
-                    'chat_id': grupo[GRUPO_ID_CHAT],
-                    'asignatura': grupo[GRUPO_ASIGNATURA]
+                grupo_data = {                                 
+                    GRUPO_ID: grupo[GRUPO_ID],
+                    GRUPO_NOMBRE: grupo[GRUPO_NOMBRE],
+                    GRUPO_PROPOSITO: grupo[GRUPO_PROPOSITO],
+                    GRUPO_TIPO: grupo[GRUPO_TIPO],
+                    GRUPO_ENLACE: grupo[GRUPO_ENLACE],
+                    GRUPO_ID_CHAT: grupo[GRUPO_ID_CHAT],
+                    GRUPO_ASIGNATURA: grupo[GRUPO_ASIGNATURA],
                 }
                 
                 # Asignar la grupo a su asignatura correspondiente (o a general si no tiene)
                 if grupo[GRUPO_ID_ASIGNATURA] is not None:
                     asignatura_id = grupo[GRUPO_ID_ASIGNATURA]
                     # Verificar que la asignatura existe en el diccionario del profesor
-                    if asignatura_id in profesores[profesor_id]['matriculas']:
-                        profesores[profesor_id]['matriculas'][asignatura_id]['grupos'].append(grupo_data)
+                    if asignatura_id in profesores[profesor_id][MATRICULAS]:
+                        profesores[profesor_id][MATRICULAS][asignatura_id][GRUPOS].append(grupo_data)
                         print(f"Asignada grupo '{grupo[GRUPO_NOMBRE]}' a asignatura ID {asignatura_id}")
                     else:
                         # Si por alguna razón la asignatura no está en el diccionario, asignar a general
-                        profesores[profesor_id]['matriculas']['general']['grupos'].append(grupo_data)
-                        print(f"grupo '{grupo[GRUPO_NOMBRE]}' asignada a 'general' (asignatura ID {asignatura_id} no encontrada)")
+                        profesores[profesor_id][MATRICULAS][GENERAL][GRUPOS].append(grupo_data)
+                        print(f"grupo '{grupo[GRUPO_NOMBRE]}' asignada a GENERAL (asignatura ID {asignatura_id} no encontrada)")
                 else:
                     # Si la grupo no tiene asignatura, agregarla a la categoría "general"
-                    profesores[profesor_id]['matriculas']['general']['grupos'].append(grupo_data)
-                    print(f"grupo '{grupo[GRUPO_NOMBRE]}' asignada a 'general' (sin asignatura asociada)")
+                    profesores[profesor_id][MATRICULAS][GENERAL][GRUPOS].append(grupo_data)
+                    print(f"grupo '{grupo[GRUPO_NOMBRE]}' asignada a GENERAL (sin asignatura asociada)")
 
         
         # Si no se encontró ningún profesor, mostrar mensaje y terminar
@@ -183,19 +195,20 @@ def register_handlers(bot):
         # Mejorar la parte que genera el mensaje y muestra las grupos
         for profesor_id, prof_info in profesores.items():
             # Sección del profesor
-            mensaje = f"👨‍🏫 *Profesor: {escape_markdown(prof_info['nombre'])}*\n"
-            mensaje += f"📧 Email: {escape_markdown(prof_info['email'])}\n"
-            mensaje += f"🕗 Horario: {escape_markdown(prof_info['horario'])}\n\n"
+            mensaje = f"👨‍🏫 *Profesor: {escape_markdown(prof_info[USUARIO_NOMBRE])}*\n"
+            mensaje += f"📧 Email: {escape_markdown(prof_info[USUARIO_EMAIL])}\n"
+            mensaje += f"🕗 Horario: {escape_markdown(prof_info[USUARIO_HORARIO])}\n\n"
             
             markup = types.InlineKeyboardMarkup()  # Crear markup para botones
             
             # Recopilar todas las grupos del profesor desde todas las asignaturas
             todas_las_grupos = []
-            for asignatura_id, asignatura in prof_info['matriculas'].items():
-                if 'grupos' in asignatura:
-                    for grupo in asignatura['grupos']:
-                        grupo['asignatura_id'] = asignatura_id
-                        grupo['asignatura_nombre'] = asignatura['nombre']
+            for asignatura_id, asignatura in prof_info[MATRICULAS].items():
+                if GRUPOS in asignatura:
+                    print(asignatura)
+                    for grupo in asignatura[GRUPOS]:
+                        grupo[GRUPO_ID_ASIGNATURA] = asignatura_id
+                        grupo[GRUPO_ASIGNATURA] = asignatura[ASIGNATURA_NOMBRE]
                         todas_las_grupos.append(grupo)
             
             print(f"Total grupos para profesor {profesor_id}: {len(todas_las_grupos)}")
@@ -206,10 +219,10 @@ def register_handlers(bot):
             # Variable para controlar si hay grupos privados
             grupos_privados = []
             
-            for asignatura_id, asignatura in prof_info['matriculas'].items():
-                if asignatura_id != 'general':  # Solo las asignaturas regulares, no la categoría "general"
-                    nombre = escape_markdown(asignatura['nombre'])
-                    codigo = asignatura.get('codigo', '') or ''
+            for asignatura_id, asignatura in prof_info[MATRICULAS].items():
+                if asignatura_id != GENERAL:  # Solo las asignaturas regulares, no la categoría "general"
+                    nombre = escape_markdown(asignatura[ASIGNATURA_NOMBRE])
+                    codigo = asignatura.get(ASIGNATURA_CODIGO, '') or ''
                     
                     # Mostrar información de la asignatura
                     mensaje += f"• {nombre}"
@@ -218,23 +231,23 @@ def register_handlers(bot):
                     mensaje += "\n"
                     
                     # Filtrar grupos para esta asignatura específica
-                    grupos_asignatura = [s for s in asignatura.get('grupos', []) if s['tipo'].lower() != GRUPO_PRIVADO]
+                    grupos_asignatura = [s for s in asignatura.get(GRUPOS, []) if s[GRUPO_TIPO].lower() != GRUPO_PRIVADO]
                     
                     # Guardar grupos privados para mostrarlas al final
-                    grupos_privados.extend([s for s in asignatura.get('grupos', []) if s['tipo'].lower() == GRUPO_PRIVADO])
+                    grupos_privados.extend([s for s in asignatura.get(GRUPOS, []) if s[GRUPO_TIPO].lower() == GRUPO_PRIVADO])
                     
                     # Mostrar grupos de esta asignatura
                     if grupos_asignatura:
                         for grupo in grupos_asignatura:
-                            proposito = grupo.get('proposito', '').lower() if grupo.get('proposito') else 'general'
-                            nombre_grupo = escape_markdown(grupo.get('nombre', 'grupo sin nombre'))
+                            proposito = grupo.get(GRUPO_PROPOSITO, '').lower() if grupo.get(GRUPO_PROPOSITO) else GENERAL
+                            nombre_grupo = escape_markdown(grupo.get(GRUPO_NOMBRE, 'grupo sin nombre'))
                             
                             # Seleccionar emoji según el propósito
-                            emoji = "📢" if proposito == 'avisos' else "👥" if proposito == 'grupal' else "🔵"
+                            emoji = "📢" if proposito == GRUPO_PROPOSITO_AVISOS else "👥" if proposito == GRUPO_PROPOSITO_GRUPAL else "🔵"
                             
                             # Mostrar como hipervínculo si tiene enlace
-                            if grupo.get('enlace'):
-                                mensaje += f"  {emoji} [{nombre_grupo}]({grupo['enlace']})\n"
+                            if grupo.get(GRUPO_ENLACE):
+                                mensaje += f"  {emoji} [{nombre_grupo}]({grupo[GRUPO_ENLACE]})\n"
                             else:
                                 mensaje += f"  {emoji} {nombre_grupo} (sin enlace disponible)\n"
                     else:
@@ -243,25 +256,25 @@ def register_handlers(bot):
                     mensaje += "\n"  # Espacio entre asignaturas
     
             # Mostrar grupos de la categoría "general" si existen
-            grupos_generales = prof_info['matriculas'].get('general', {}).get('grupos', [])
-            grupos_generales_no_privados = [s for s in grupos_generales if s['tipo'].lower() != GRUPO_PRIVADO]
+            grupos_generales = prof_info[MATRICULAS].get(GENERAL, {}).get(GRUPOS, [])
+            grupos_generales_no_privados = [s for s in grupos_generales if s[GRUPO_TIPO].lower() != GRUPO_PRIVADO]
             
             # Añadir grupos privados de la categoría general
-            grupos_privados.extend([s for s in grupos_generales if s['tipo'].lower() == GRUPO_PRIVADO])
+            grupos_privados.extend([s for s in grupos_generales if s[GRUPO_TIPO].lower() == GRUPO_PRIVADO])
             
             # Mostrar grupos generales si existen
             if grupos_generales_no_privados:
                 mensaje += "🌐 *grupos Generales:*\n"
                 for grupo in grupos_generales_no_privados:
-                    proposito = grupo.get('proposito', '').lower() if grupo.get('proposito') else 'general'
-                    nombre_grupo = escape_markdown(grupo.get('nombre', 'grupo sin nombre'))
+                    proposito = grupo.get(GRUPO_PROPOSITO, '').lower() if grupo.get(GRUPO_PROPOSITO) else GENERAL
+                    nombre_grupo = escape_markdown(grupo.get(GRUPO_NOMBRE, 'grupo sin nombre'))
                     
                     # Seleccionar emoji según el propósito
-                    emoji = "📢" if proposito == 'avisos' else "👥" if proposito == 'grupal' else "🔵"
+                    emoji = "📢" if proposito == GRUPO_PROPOSITO_AVISOS else "👥" if proposito == GRUPO_PROPOSITO_GRUPAL else "🔵"
                     
                     # Mostrar como hipervínculo si tiene enlace
-                    if grupo.get('enlace'):
-                        mensaje += f"  {emoji} [{nombre_grupo}]({grupo['enlace']})\n"
+                    if grupo.get(GRUPO_ENLACE):
+                        mensaje += f"  {emoji} [{nombre_grupo}]({grupo[GRUPO_ENLACE]})\n"
                     else:
                         mensaje += f"  {emoji} {nombre_grupo} (sin enlace disponible)\n"
                 
@@ -285,7 +298,7 @@ def register_handlers(bot):
                 markup = types.InlineKeyboardMarkup()
                 markup.add(types.InlineKeyboardButton(
                     "🔒 Solicitar acceso a tutoría privado", 
-                    callback_data=f"solicitar_grupo_{primera_privado['id']}_{profesor_id}"
+                    callback_data=f"{SOLICITAR_GRUPO}{primera_privado[GRUPO_ID]}_{profesor_id}"
                 ))
                 
                 bot.send_message(
@@ -305,7 +318,7 @@ def register_handlers(bot):
             
     # Aquí añadimos el resto de handlers para tutorias
     
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("solicitar_grupo_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(SOLICITAR_GRUPO))
     def handle_solicitar_grupo(call):
         """Gestiona solicitudes de acceso a grupos de tutoría privado"""
         chat_id = call.message.chat.id
@@ -384,8 +397,8 @@ def register_handlers(bot):
             # Crear botones para que el profesor pueda aprobar o rechazar
             markup_profesor = types.InlineKeyboardMarkup(row_width=2)
             markup_profesor.add(
-                types.InlineKeyboardButton("✅ Aprobar", callback_data=f"aprobar_tutoria_{grupo_id}_{user[USUARIO_ID]}"),
-                types.InlineKeyboardButton("❌ Rechazar", callback_data=f"rechazar_tutoria_{grupo_id}_{user[USUARIO_ID]}")
+                types.InlineKeyboardButton("✅ Aprobar", callback_data=f"{APROBAR_TUTORIA}{grupo_id}_{user[USUARIO_ID]}"),
+                types.InlineKeyboardButton("❌ Rechazar", callback_data=f"{RECHAZAR_TUTORIA}{grupo_id}_{user[USUARIO_ID]}")
             )
             
             # 5. Generar mensaje de confirmación para el estudiante (sin enviar enlace todavía)
@@ -440,7 +453,7 @@ def register_handlers(bot):
         
         print("### FIN SOLICITAR_grupo ###\n")
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("aprobar_tutoria_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(APROBAR_TUTORIA))
     def handle_aprobar_tutoria(call):
         """Maneja la aprobación de una solicitud de tutoría privado"""
         chat_id = call.message.chat.id
@@ -535,7 +548,7 @@ def register_handlers(bot):
     
         print("### FIN APROBAR_TUTORIA ###\n")
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("rechazar_tutoria_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(RECHAZAR_TUTORIA))
     def handle_rechazar_tutoria(call):
         """Maneja el rechazo de una solicitud de tutoría privado"""
         chat_id = call.message.chat.id

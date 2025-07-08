@@ -2,6 +2,8 @@
 ## ===== Usuarios =====
 ##=====================
 
+USUARIOS = "Usuarios"
+
 # Constantes de campos válidos en la base de datos
 USUARIO_ID = "Id_usuario"
 USUARIO_NOMBRE = "Nombre"
@@ -55,6 +57,8 @@ USUARIO_NO_REGISTRADO = "NO"
 ## ===== Asignaturas =====
 ##========================
 
+ASIGNATURAS = "Asignaturas"
+
 # Constantes de campos de la tabla ASIGNATURAS
 ASIGNATURA_ID = "Id_asignatura"
 ASIGNATURA_NOMBRE = "Nombre"
@@ -80,6 +84,8 @@ ASIGNATURA_FIELDS = {
 ##===========================
 ## ===== Grupos_tutoria =====
 ##===========================
+
+GRUPOS = "Grupos_tutoria"
 
 # Constantes de campos de la tabla GRUPOS o SALAS
 GRUPO_ID = "id_sala"
@@ -121,11 +127,18 @@ GRUPO_FIELDS = {
 GRUPO_PUBLICO = "pública"
 GRUPO_PRIVADO = "privada"
 
+# Posibles propositos
+GRUPO_PROPOSITO_INDIVIDUAL = "individual"
+GRUPO_PROPOSITO_GRUPAL = "grupal"
+GRUPO_PROPOSITO_AVISOS = "avisos"
+
 
 
 ##=======================
 ## ===== Matriculas =====
 ##=======================
+
+MATRICULAS = "Matriculas"
 
 # Constantes de campos de la tabla MATRICULAS
 MATRICULA_ID = "id_matricula"
@@ -155,7 +168,7 @@ MATRICULA_FIELDS = {
 }
 
 # Posibles valores campos
-MATRICULA_ALUMNO = "estudiante"
+MATRICULA_ESTUDIANTE = "estudiante"
 MATRICULA_PROFESOR = "docente"
 
 
@@ -164,10 +177,12 @@ MATRICULA_PROFESOR = "docente"
 ## ===== Valoraciones =====
 ##=========================
 
+VALORACIONES = "Valoraciones"
+
 # Constantes de campos de la tabla VALORACIONES
-VALORACION_ID = "Id_usuario"
-VALORACION_EVALUADOR_ID = "evaluador_id"
-VALORACION_PROFESOR_ID = "profesor_id"
+VALORACION_ID = "id_valoracion"
+VALORACION_ID_EVALUADOR = "evaluador_id"
+VALORACION_ID_PROFESOR = "profesor_id"
 VALORACION_PUNTUACION = "puntuacion"
 VALORACION_COMENTARIO = "comentario"
 VALORACION_FECHA = "fecha"
@@ -177,8 +192,8 @@ VALORACION_ID_SALA = "id_sala"
 # Conjunto de campos válidos (para validación)
 VALORACION_CAMPOS_VALIDOS = {
     "VALORACION_ID",
-    "VALORACION_EVALUADOR_ID",
-    "VALORACION_PROFESOR_ID",
+    "VALORACION_ID_EVALUADOR",
+    "VALORACION_ID_PROFESOR",
     "VALORACION_PUNTUACION",
     "VALORACION_COMENTARIO",
     "VALORACION_FECHA",
@@ -188,8 +203,8 @@ VALORACION_CAMPOS_VALIDOS = {
 
 VALORACION_FIELDS = { 
     "VALORACION_ID":VALORACION_ID,
-    "VALORACION_EVALUADOR_ID":VALORACION_EVALUADOR_ID,
-    "VALORACION_PROFESOR_ID":VALORACION_PROFESOR_ID,
+    "VALORACION_ID_EVALUADOR":VALORACION_ID_EVALUADOR,
+    "VALORACION_ID_PROFESOR":VALORACION_ID_PROFESOR,
     "VALORACION_PUNTUACION":VALORACION_PUNTUACION,
     "VALORACION_COMENTARIO":VALORACION_COMENTARIO,
     "VALORACION_FECHA":VALORACION_FECHA,
@@ -198,5 +213,5 @@ VALORACION_FIELDS = {
 }
 
 # Posibles valores campos
-VALORACION_ANONIMA = True
+VALORACION_SI_ANONIMA = True
 VALORACION_NO_ANONIMA = False

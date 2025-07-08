@@ -37,7 +37,7 @@ logger = configurar_logger()
 def menu_profesor():
     """Devuelve un teclado personalizado para profesores en un grupo"""
     # Crear un teclado personalizado con solo el botón de terminar tutoría
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True, row_width=1)
     
     # Añadir solo el botón de terminar tutoría
     markup.add(
@@ -48,28 +48,9 @@ def menu_profesor():
 
 def menu_estudiante():
     """Crea un teclado personalizado con solo el botón de finalizar tutoría"""
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True)
     markup.row(types.KeyboardButton("❌ Terminar Tutoria"))
     return markup
-
-def configurar_comandos_por_rol():
-    """Devuelve listas de comandos específicos para profesores y estudiantes."""
-    # Comandos para profesores
-    comandos_profesor = [
-        types.BotCommand('/start', 'Iniciar el bot'),
-        types.BotCommand('/configurar_grupo', 'Configuración inicial del grupo'),
-        types.BotCommand('/help', 'Mostrar ayuda del bot'),
-        types.BotCommand('/finalizar', 'Finalizar una sesión de tutoría'),
-    ]
-    
-    # Comandos para estudiantes
-    comandos_estudiante = [
-        types.BotCommand('/start', 'Iniciar el bot'),
-        types.BotCommand('/help', 'Mostrar ayuda del bot'),
-        types.BotCommand('/finalizar', 'Finalizar una sesión de tutoría'),
-    ]
-    
-    return (comandos_profesor, comandos_estudiante)
 
 # Funciones de verificación y estado
 def es_profesor(user_id):

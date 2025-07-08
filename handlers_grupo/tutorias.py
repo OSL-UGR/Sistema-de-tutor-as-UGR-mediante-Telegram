@@ -5,8 +5,11 @@ from telebot import types
 import time
 
 from handlers_grupo.utils import configurar_logger
+from utils.state_manager import get_state
 
 logger = configurar_logger()
+
+COMMAND_FINALIZAR = "finalizar"
 
 def register_handlers(bot):
 
@@ -44,65 +47,47 @@ def register_handlers(bot):
 
             # Comportamiento diferente según el rol
             if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
-                # Es profesor: mostrar lista de alumnos para expulsar
-                print(f"👨‍🏫 {user_id} ES PROFESOR - Mostrando lista de estudiantes")
-
-                # Crear lista de estudiantes para seleccionar
-                markup = types.InlineKeyboardMarkup(row_width=1)
-
-                # Obtener miembros del grupo que no son administradores
+                # Es profesor
+                estudiante_id = get_state(chat_id)
                 try:
-                    chat_admins = bot.get_chat_administrators(chat_id)
-                    admin_ids = [admin.user.id for admin in chat_admins]
+                    # Obtener información del estudiante
+                    estudiante_info = bot.get_chat_member(chat_id, estudiante_id)
+                    nombre = estudiante_info.user.first_name
+                    if estudiante_info.user.last_name:
+                        nombre += f" {estudiante_info.user.last_name}"
 
-                    # Obtener todos los miembros
-                    chat_members = []
-                    offset = 0
-                    limit = 50  # Límite por consulta
-
-                    while True:
-                        members_chunk = bot.get_chat_members(chat_id, offset=offset, limit=limit)
-                        if not members_chunk:
-                            break
-                        chat_members.extend(members_chunk)
-                        offset += limit
-                        if len(members_chunk) < limit:
-                            break
-
-                    # Filtrar estudiantes (no administradores)
-                    estudiantes = [m for m in chat_members if m.user.id not in admin_ids]
-
-                    if not estudiantes:
-                        bot.send_message(chat_id, "No hay estudiantes en este grupo para finalizar sesión.")
-                        return
-
-                    # Crear botones para cada estudiante
-                    for estudiante in estudiantes:
-                        nombre = estudiante.user.first_name
-                        if estudiante.user.last_name:
-                            nombre += f" {estudiante.user.last_name}"
-                        markup.add(
-                            types.InlineKeyboardButton(
-                                nombre,
-                                callback_data=f"terminar_{estudiante.user.id}"
-                            )
-                        )
-
-                    # Añadir botón de cancelar
-                    markup.add(types.InlineKeyboardButton("Cancelar", callback_data="cancelar_terminar"))
-
-                    # Enviar mensaje con la lista
-                    bot.send_message(
+                    # Informar al grupo
+                    enviado = bot.send_message(
                         chat_id,
-                        "Selecciona el estudiante cuya sesión deseas finalizar:",
-                        reply_markup=markup
+                        f"👋 El profesor ha finalizado la sesión de tutoría con {nombre}."
+                    )
+
+                    # Expulsar al estudiante (ban temporal de 30 segundos)
+                    until_date = int(time.time()) + 30
+                    bot.ban_chat_member(chat_id, estudiante_id, until_date=until_date)
+
+                    # Enviar mensaje privado al estudiante
+                    try:
+                        bot.send_message(
+                            estudiante_id,
+                            "El profesor ha finalizado tu sesión de tutoría. ¡Gracias por participar!"
+                        )
+                    except Exception as dm_error:
+                        print(f"No se pudo enviar mensaje privado al estudiante: {dm_error}")
+
+                    # Confirmar al profesor
+                    bot.edit_message_text(
+                        f"✅ Has finalizado la sesión de tutoría con {nombre}.",
+                        chat_id=chat_id,
+                        message_id=enviado.id
                     )
 
                 except Exception as e:
-                    print(f"❌ Error al obtener miembros del grupo: {e}")
-                    bot.send_message(
-                        chat_id,
-                        "No pude obtener la lista de estudiantes. Asegúrate de que tengo permisos de administrador."
+                    print(f"❌ Error al expulsar estudiante: {e}")
+                    bot.edit_message_text(
+                        "No pude finalizar la sesión del estudiante. Asegúrate de que tengo permisos de administrador.",
+                        chat_id=chat_id,
+                        message_id=enviado.id
                     )
 
             else:
@@ -145,82 +130,7 @@ def register_handlers(bot):
             print(f"❌❌❌ ERROR EN HANDLER TERMINAR TUTORÍA: {e}")
             bot.send_message(chat_id, "Ocurrió un error al procesar tu solicitud.")
 
-
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("terminar_") or call.data == "cancelar_terminar")
-    def handle_terminar_estudiante(call):
-        """Procesa la selección del profesor para terminar la sesión de un estudiante"""
-        chat_id = call.message.chat.id
-        message_id = call.message.message_id
-        user_id = call.from_user.id
-
-        print(f"\n==================================================")
-        print(f"⚠️⚠️⚠️ CALLBACK TERMINAR ESTUDIANTE ⚠️⚠️⚠️")
-        print(f"⚠️ Chat ID: {chat_id} | User ID: {user_id}")
-        print(f"⚠️ Callback data: {call.data}")
-        print("==================================================\n")
-
-        try:
-            # Verificar que es profesor
-            user = get_usuarios(USUARIO_ID_TELEGRAM=user_id)
-            if not user or user[0][USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
-                bot.answer_callback_query(call.id, "Solo los profesores pueden usar esta función.")
-                return
-            user = user[0]
-
-            # Cancelar operación si se solicita
-            if call.data == "cancelar_terminar":
-                bot.edit_message_text(
-                    "Operación cancelada.",
-                    chat_id=chat_id,
-                    message_id=message_id
-                )
-                bot.answer_callback_query(call.id)
-                return
-
-            # Obtener ID del estudiante a expulsar
-            estudiante_id = int(call.data.split("_")[1])
-
-            try:
-                # Obtener información del estudiante
-                estudiante_info = bot.get_chat_member(chat_id, estudiante_id)
-                nombre = estudiante_info.user.first_name
-                if estudiante_info.user.last_name:
-                    nombre += f" {estudiante_info.user.last_name}"
-
-                # Informar al grupo
-                bot.send_message(
-                    chat_id,
-                    f"👋 El profesor ha finalizado la sesión de tutoría con {nombre}."
-                )
-
-                # Expulsar al estudiante (ban temporal de 30 segundos)
-                until_date = int(time.time()) + 30
-                bot.ban_chat_member(chat_id, estudiante_id, until_date=until_date)
-
-                # Enviar mensaje privado al estudiante
-                try:
-                    bot.send_message(
-                        estudiante_id,
-                        "El profesor ha finalizado tu sesión de tutoría. ¡Gracias por participar!"
-                    )
-                except Exception as dm_error:
-                    print(f"No se pudo enviar mensaje privado al estudiante: {dm_error}")
-
-                # Confirmar al profesor
-                bot.edit_message_text(
-                    f"✅ Has finalizado la sesión de tutoría con {nombre}.",
-                    chat_id=chat_id,
-                    message_id=message_id
-                )
-
-            except Exception as e:
-                print(f"❌ Error al expulsar estudiante: {e}")
-                bot.edit_message_text(
-                    "No pude finalizar la sesión del estudiante. Asegúrate de que tengo permisos de administrador.",
-                    chat_id=chat_id,
-                    message_id=message_id
-                )
-
-        except Exception as e:
-            print(f"❌❌❌ ERROR EN CALLBACK TERMINAR ESTUDIANTE: {e}")
-            bot.answer_callback_query(call.id, "Ocurrió un error al procesar tu solicitud.")
+    @bot.message_handler(commands=[COMMAND_FINALIZAR])
+    def handle_finalizar(message):
+        """Maneja el comando para finalizar tutoria"""
+        handle_terminar_tutoria(message)

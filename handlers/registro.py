@@ -11,7 +11,7 @@ from email.message import EmailMessage
 import smtplib
 from pathlib import Path
 
-from handlers.horarios import set_state
+from utils.state_manager import *
 
 # Añadir directorio raíz al path para resolver importaciones
 sys.path.append(str(Path(__file__).parent.parent))
@@ -23,12 +23,17 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db.queries import (get_usuarios, update_usuario)
 from db.constantes import *
 # Añadir al inicio del archivo
-from utils.state_manager import get_state, clear_state, user_data
+from utils.state_manager import *
 
 # Variables para seguridad de token
 token_intentos_fallidos = {}  # {chat_id: número de intentos}
 token_bloqueados = {}  # {chat_id: tiempo de desbloqueo}
 token_usados = set()  # Conjunto de tokens ya utilizados
+
+COMMAND_START = "start"
+
+# Calldata
+CANCELAR_REGISTRO = "cancelar_registro"
 
 # Estados del proceso de registro
 STATE_EMAIL = "registro_email"
@@ -126,7 +131,7 @@ def register_handlers(bot):
         #return re.match(r'.+@(correo\.)?ugr\.es$', email) is not None
         return re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', email) is not None
         
-    @bot.message_handler(commands=["start"])
+    @bot.message_handler(commands=[COMMAND_START])
     def handle_start(message):
         """Inicia el proceso de registro simplificado"""
         chat_id = message.chat.id
@@ -213,8 +218,8 @@ def register_handlers(bot):
         
         # Generar token seguro de 6 dígitos
         token = str(random.randint(100000, 999999))
-        user_data[chat_id]["token"] = token
-        user_data[chat_id]["token_expiry"] = time.time() + 180  # Token válido por 3 minutos
+        user_data[chat_id][TOKEN] = token
+        user_data[chat_id][TOKEN_EXPIRY] = time.time() + 180  # Token válido por 3 minutos
         
         # Determinar tipo de usuario por el correo
         es_estudiante = email.endswith("@correo.ugr.es")
@@ -224,7 +229,7 @@ def register_handlers(bot):
         if send_verification_email(email, token):
             # Botón para cancelar
             markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("❌ Cancelar", callback_data="cancelar_registro"))
+            markup.add(types.InlineKeyboardButton("❌ Cancelar", callback_data=CANCELAR_REGISTRO))
             
             bot.send_message(
                 chat_id, 
@@ -289,18 +294,18 @@ def register_handlers(bot):
         
         # Validar el token
         es_valido = False
-        if chat_id in user_data and "token" in user_data[chat_id]:
-            token_almacenado = user_data[chat_id].get("token")
-            token_expiry = user_data[chat_id].get("token_expiry", 0)
+        if chat_id in user_data and TOKEN in user_data[chat_id]:
+            token_almacenado = user_data[chat_id].get(TOKEN)
+            token_expiry = user_data[chat_id].get(TOKEN_EXPIRY, 0)
             
             if token_ingresado == token_almacenado and time.time() < token_expiry:
                 es_valido = True
             elif time.time() >= token_expiry:
-                bot.send_message(chat_id, "⚠️ El código ha expirado. Por favor, solicita uno nuevo con /start")
+                bot.send_message(chat_id, f"⚠️ El código ha expirado. Por favor, solicita uno nuevo con /{COMMAND_START}")
                 clear_state(chat_id)
                 return
             else:
-                bot.send_message(chat_id, "❌ Código incorrecto. Inténtalo de nuevo o cancela con /cancelar")
+                bot.send_message(chat_id, "❌ Código incorrecto. Inténtalo de nuevo")
                 return
     
         if es_valido:
@@ -330,14 +335,14 @@ def register_handlers(bot):
         # Mostrar menú principal o siguiente paso
         mostrar_menu_principal(message)
 
-    @bot.callback_query_handler(func=lambda call: call.data == "cancelar_registro")
+    @bot.callback_query_handler(func=lambda call: call.data == CANCELAR_REGISTRO)
     def handle_cancelar_registro(call):
         """Cancela el proceso de registro"""
         chat_id = call.message.chat.id
         
         bot.send_message(
             chat_id, 
-            "Registro cancelado. Puedes iniciarlo nuevamente con /start cuando lo desees.",
+            f"Registro cancelado. Puedes iniciarlo nuevamente con /{COMMAND_START} cuando lo desees.",
             reply_markup=telebot.types.ReplyKeyboardRemove()
         )
         clear_state(chat_id)

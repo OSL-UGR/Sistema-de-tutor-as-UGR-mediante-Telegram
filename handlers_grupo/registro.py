@@ -1,50 +1,24 @@
 from db.constantes import ASIGNATURA_ID, ASIGNATURA_NOMBRE, GRUPO_ASIGNATURA, GRUPO_ID, GRUPO_ID_ASIGNATURA, GRUPO_NOMBRE, GRUPO_PRIVADO, GRUPO_PUBLICO, MATRICULA_ASIGNATURA, MATRICULA_ID_ASIGNATURA, MATRICULA_PROFESOR, USUARIO_ID, USUARIO_NOMBRE, USUARIO_TIPO_PROFESOR
 from db.queries import get_asignaturas, get_grupos_tutoria, get_matriculas, get_usuarios, insert_grupo_tutoria
 from telebot import types
-from handlers_grupo.utils import configurar_comandos_por_rol, configurar_logger, es_profesor, menu_estudiante, menu_profesor
-
+from handlers_grupo.utils import configurar_logger, es_profesor
 import telebot
 
-from utils.state_manager import clear_state, get_state, set_state, user_data
+# Estados
 
+ESPERANDO_ASIGNATURA_GRUPO = "esperando_asignatura_grupo"
+
+from utils.state_manager import *
 logger = configurar_logger()
 
+COMMAND_CONFIGURAR_GRUPO = "configurar_grupo"
+
+# Calldata
+CONFIG_ASIG = 'config_asig_'
+CONFIG_TUTORIA_PRIVADA = 'config_tutoria_privada'
+
 def register_handlers(bot):
-    def actualizar_interfaz_usuario(user_id, chat_id=None):
-        """Actualiza la interfaz completa según el rol del usuario."""
-        comandos_profesor, comandos_estudiante = configurar_comandos_por_rol()
-        try:
-            if es_profesor(user_id):
-                # Actualizar comandos visibles
-                scope = telebot.types.BotCommandScopeChat(user_id)
-                bot.set_my_commands(comandos_profesor, scope)
-
-                # Si hay un chat_id, enviar menú de profesor
-                if chat_id:
-                    bot.send_message(
-                        chat_id,
-                        "🔄 Interfaz actualizada para profesor",
-                        reply_markup=menu_profesor()
-                    )
-                logger.info(f"Interfaz de profesor configurada para usuario {user_id}")
-            else:
-                # Actualizar comandos visibles
-                scope = telebot.types.BotCommandScopeChat(user_id)
-                bot.set_my_commands(comandos_estudiante, scope)
-
-                # Si hay un chat_id, enviar menú de estudiante
-                if chat_id:
-                    bot.send_message(
-                        chat_id,
-                        "🔄 Interfaz actualizada para estudiante",
-                        reply_markup=menu_estudiante()
-                    )
-                logger.info(f"Interfaz de estudiante configurada para usuario {user_id}")
-        except Exception as e:
-            logger.error(f"Error configurando interfaz para usuario {user_id}: {e}")
-
-
-    @bot.message_handler(commands=['configurar_grupo'])
+    @bot.message_handler(commands=[COMMAND_CONFIGURAR_GRUPO])
     def configurar_grupo(message):
         """
         Inicia el proceso de configuración de un grupo como grupo de tutoría
@@ -132,12 +106,12 @@ def register_handlers(bot):
 
         if asignaturas_disponibles:
             for asig in asignaturas_disponibles:
-                callback_data = f"config_asig_{asig[MATRICULA_ID_ASIGNATURA]}"
+                callback_data = f"{CONFIG_ASIG}{asig[MATRICULA_ID_ASIGNATURA]}"
                 markup.add(types.InlineKeyboardButton(text=asig[MATRICULA_ASIGNATURA], callback_data=callback_data))
 
         # Añadir opción de tutoría privada SOLO si no tiene una ya
         if not tiene_privada:
-            markup.add(types.InlineKeyboardButton("Tutoría Privada", callback_data="config_tutoria_privada"))
+            markup.add(types.InlineKeyboardButton("Tutoría Privada", callback_data=CONFIG_TUTORIA_PRIVADA))
             print(f"✅ Usuario {user_id} NO tiene grupo privada - Mostrando opción")
         else:
             print(f"⚠️ Usuario {user_id} YA tiene grupo privada - Ocultando opción")
@@ -151,8 +125,8 @@ def register_handlers(bot):
             return
 
         # Guardar estado para manejar la siguiente interacción
-        set_state(user_id, "esperando_asignatura_grupo")
-        user_data[user_id] = {"chat_id": chat_id}
+        set_state(user_id, ESPERANDO_ASIGNATURA_GRUPO)
+        user_data[user_id] = {CHAT_ID: chat_id}
 
         # Enviar mensaje con las opciones
         mensaje = "🏫 *Configuración de grupo de tutoría*\n\n"
@@ -174,23 +148,23 @@ def register_handlers(bot):
         )
 
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('config_asig_'))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(CONFIG_ASIG))
     def handle_configuracion_asignatura(call):
         user_id = call.from_user.id
         id_asignatura = call.data.split('_')[2]  # Extraer ID de la asignatura
 
         # Verificar estado
-        if get_state(user_id) != "esperando_asignatura_grupo":
+        if get_state(user_id) != ESPERANDO_ASIGNATURA_GRUPO:
             bot.answer_callback_query(call.id, "Esta opción ya no está disponible")
             return
 
         # Obtener datos guardados
-        if user_id not in user_data or "chat_id" not in user_data[user_id]:
+        if user_id not in user_data or CHAT_ID not in user_data[user_id]:
             bot.answer_callback_query(call.id, "Error: Datos no encontrados")
             clear_state(user_id)
             return
 
-        chat_id = user_data[user_id]["chat_id"]
+        chat_id = user_data[user_id][CHAT_ID]
 
         try:
             # Registrar el grupo en la base de datos
@@ -211,7 +185,6 @@ def register_handlers(bot):
             # Configurar directamente como grupo de avisos (pública)
             # CORRECCIÓN: Usar "pública" con tilde para cumplir con el constraint
             tipo_grupo = GRUPO_PUBLICO  # Cambiado de "publica" a "pública"
-            grupo_tipo_texto = "Avisos"
             nuevo_nombre = f"{asignatura_nombre} - Avisos"
 
             # Cambiar el nombre del grupo
@@ -250,7 +223,6 @@ def register_handlers(bot):
                 "• Gestionar el grupo según el propósito configurado\n"
                 "• Compartir el enlace de invitación con tus estudiantes",
                 parse_mode="Markdown",
-                reply_markup=menu_profesor()  # Esto ahora devuelve un ReplyKeyboardMarkup
             )
 
         except Exception as e:
@@ -261,22 +233,22 @@ def register_handlers(bot):
         clear_state(user_id)
 
 
-    @bot.callback_query_handler(func=lambda call: call.data == 'config_tutoria_privada')
+    @bot.callback_query_handler(func=lambda call: call.data == CONFIG_TUTORIA_PRIVADA)
     def handle_configuracion_tutoria_privada(call):
         user_id = call.from_user.id
 
         # Verificar estado
-        if get_state(user_id) != "esperando_asignatura_grupo":
+        if get_state(user_id) != ESPERANDO_ASIGNATURA_GRUPO:
             bot.answer_callback_query(call.id, "Esta opción ya no está disponible")
             return
 
         # Obtener datos guardados
-        if user_id not in user_data or "chat_id" not in user_data[user_id]:
+        if user_id not in user_data or CHAT_ID not in user_data[user_id]:
             bot.answer_callback_query(call.id, "Error: Datos no encontrados")
             clear_state(user_id)
             return
 
-        chat_id = user_data[user_id]["chat_id"]
+        chat_id = user_data[user_id][CHAT_ID]
 
         try:
             # Registrar el grupo en la base de datos        
@@ -294,7 +266,6 @@ def register_handlers(bot):
 
             # Configurar como grupo de tutorías privadas
             tipo_grupo = GRUPO_PRIVADO
-            grupo_tipo_texto = "Tutoría Privada"
             nuevo_nombre = f"Tutoría Privada - Prof. {nombre_profesor}"
 
             # Cambiar el nombre del grupo
@@ -333,7 +304,6 @@ def register_handlers(bot):
                 "• Invitar a estudiantes específicos para tutorías\n"
                 "• Expulsar estudiantes cuando finalice la consulta",
                 parse_mode="Markdown",
-                reply_markup=menu_profesor()
             )
 
         except Exception as e:
@@ -363,5 +333,5 @@ def register_handlers(bot):
             "2. Selecciona 'Administradores'\n"
             "3. Añádeme como administrador\n"
             "4. Dame todos los permisos que me falten para ser adminsitrador.\n\n"
-            "Una vez me hayas hecho administrador, usa el comando /configurar_grupo."
+            f"Una vez me hayas hecho administrador, usa el comando /{COMMAND_CONFIGURAR_GRUPO}."
         )
