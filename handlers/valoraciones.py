@@ -9,6 +9,7 @@ from handlers.horarios import set_state
 from utils.state_manager import *
 
 COMMAND_VALORAR_PROFESOR = 'valorar_profesor'
+COMMAND_VER_VALORACIONES = 'ver_valoraciones'
 
 # Estados
 
@@ -22,6 +23,9 @@ COMENTARIO = "comentario_"
 ANONIMO = "anonimo_"
 SI = "si"
 NO = "no"
+VER_COMENTARIOS = "ver_comentarios"
+VER_NO_ANONIMAS = "ver_no_anonimas"
+VOLVER_VALORACIONES = "volver_valoraciones"
 
 # Añadir directorio padre al path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -94,7 +98,7 @@ def register_handlers(bot):
         )
     
     @bot.callback_query_handler(func=lambda call: call.data.startswith(VALORAR))
-    def handle_seleccion_profesor_valoracion(call):
+    def handle_valorar(call):
         chat_id = call.message.chat.id
         profesor_id = int(call.data.split("_")[1])
         user_id = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][GRUPO_ID_USUARIO]
@@ -154,11 +158,11 @@ def register_handlers(bot):
         chat_id = call.message.chat.id
         profesor_id = call.data.split("_")[1]
         opcion = call.data.split("_")[2]
-        user_id = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][GRUPO_ID_USUARIO]
+        user_id = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_ID]
         
         if opcion == SI:
             delete_valoracion(get_valoraciones(VALORACION_ID_EVALUADOR=user_id, VALORACION_ID_PROFESOR=profesor_id)[0][VALORACION_ID])
-            handle_seleccion_profesor_valoracion(call)
+            handle_valorar(call)
         else:
             bot.edit_message_text(
                 chat_id=chat_id,
@@ -284,50 +288,187 @@ def register_handlers(bot):
         
         bot.answer_callback_query(call.id)
         
-# Al final del archivo, añade esta función para que sea importable desde otros módulos
-def iniciar_valoracion_profesor(bot, profesor_id, estudiante_id, grupo_id=None):
-    """Inicia el proceso de valoración de un profesor desde otro módulo"""
-    # Buscar usuario por id
-    estudiante = get_usuarios(USUARIO_ID=estudiante_id)[0]
+    @bot.message_handler(commands=[COMMAND_VER_VALORACIONES])
+    def handle_ver_valoraciones(message, get_text = False):
+        """Muestra valoraciones recibidas"""
+        chat_id = message.chat.id
+        user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)[0]
+
+        # Verificar que el usuario es profesor
+        if not user or user[USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
+            bot.send_message(
+                chat_id,
+                "❌ Solo los profesores pueden versus valoraciones."
+            )
+            return
+
+        valoraciones = get_valoraciones(VALORACION_ID_PROFESOR=user[USUARIO_ID])
+        total = 0
+        total_anon = 0
+        total_public = 0
+        n_anon = 0
+        n_public = 0
+
+        for val in valoraciones:
+            total += val[VALORACION_PUNTUACION]
+            if (val[VALORACION_ES_ANONIMA] == VALORACION_SI_ANONIMA):
+                total_anon += val[VALORACION_PUNTUACION]
+                n_anon += 1
+            elif (val[VALORACION_ES_ANONIMA] == VALORACION_NO_ANONIMA):
+                total_public += val[VALORACION_PUNTUACION]
+                n_public += 1
+
+        texto = "💯 Valoraciones (1-5⭐)\n\n"
+            
+            
+        if valoraciones:
+            texto += f"• Media total: {total/len(valoraciones)}⭐\n"
+            if n_anon:
+                texto += f"• Media anonimas: {total_anon/n_anon}⭐\n"
+            else:
+                texto += f"• Media anonimas: -⭐ (No hay)\n"
+            if n_public:
+                texto += f"• Media publicas: {total_public/n_public}⭐\n"
+            else:
+                texto += f"• Media publicas: -⭐ (No hay)\n"
+        else:
+            texto+= "No hay valoraciones"
+
+        # Crear botones útiles con callback data simplificados
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton(
+                "📝 Ver comentarios",
+                callback_data=VER_COMENTARIOS
+            ),
+            types.InlineKeyboardButton(
+                "🧑 Ver nombres",
+                callback_data=VER_NO_ANONIMAS
+            )
+        )
+
+        # Enviar mensaje SIN formato markdown para evitar errores
+        try:
+            if not get_text:
+                bot.send_message(
+                    chat_id,
+                    texto,
+                    reply_markup=markup
+                )
+            else:
+                return texto, markup
+        except Exception as e:
+            print(f"Error al mostrar valoraciones: {e}")
+            bot.send_message(
+                chat_id,
+                "❌ Error al mostrar valoraciones.",
+                reply_markup=markup
+            )
+        
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(VER_COMENTARIOS))
+    def handle_ver_no_anonimas(call):
+        chat_id = call.message.chat.id
+        user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0]
+        valoraciones = get_valoraciones(VALORACION_ID_PROFESOR=user[USUARIO_ID])
+
+        texto = "💯 Valoraciones comentadas (1-5⭐)\n\n"
+
+        hay_comentadas = False
+        if valoraciones and valoraciones != []:
+            for val in valoraciones:
+                if val[VALORACION_COMENTARIO]:
+                    hay_comentadas = True
+                    alumno = get_usuarios(USUARIO_ID=val[VALORACION_ID_EVALUADOR])[0]
+
+                    if val[VALORACION_ES_ANONIMA] == VALORACION_SI_ANONIMA:
+                        texto+= "• Anonimo: "
+                    elif val[VALORACION_ES_ANONIMA] == VALORACION_NO_ANONIMA:
+                        texto+= f"• {alumno[USUARIO_NOMBRE]} {alumno[USUARIO_APELLIDOS]}: "
+                    
+                    texto += (f"{val[VALORACION_PUNTUACION]}⭐\n"
+
+                              f"   {val[VALORACION_COMENTARIO]}\n\n"         
+                    )
+            
+            if (hay_comentadas == False):
+                texto += "No hay valoraciones\n"
+        else:
+            texto += "No hay valoraciones\n"
+
+        # Botón para volver
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(types.InlineKeyboardButton("🔙 Volver", callback_data=VOLVER_VALORACIONES))
+        print("✅ Markup de botones creado")
+        
+        bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=call.message.message_id,
+                text=texto,
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+
+        bot.answer_callback_query(call.id)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(VER_NO_ANONIMAS))
+    def handle_ver_no_anonimas(call):
+        chat_id = call.message.chat.id
+        user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0]
+        valoraciones = get_valoraciones(VALORACION_ID_PROFESOR=user[USUARIO_ID], VALORACION_ES_ANONIMA=VALORACION_NO_ANONIMA)
+
+        texto = "💯 Valoraciones publicas (1-5⭐)\n\n"
+
+        if valoraciones and valoraciones != []:
+            valoraciones = sorted(valoraciones, key=lambda val: val[VALORACION_PUNTUACION])
+            current_score = 0
+            for val in valoraciones:
+                if current_score < val[VALORACION_PUNTUACION]:
+                    current_score = val[VALORACION_PUNTUACION]
+                    texto += f"• " + current_score*"⭐" + f"({current_score}):\n"
+
+                alumno = get_usuarios(USUARIO_ID=val[VALORACION_ID_EVALUADOR])[0]
+                texto+= f"  -{alumno[USUARIO_NOMBRE]} {alumno[USUARIO_APELLIDOS]}\n"
+        else:
+            texto += "No hay valoraciones publicas\n"
+
+        # Botón para volver
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(types.InlineKeyboardButton("🔙 Volver", callback_data=VOLVER_VALORACIONES))
+        print("✅ Markup de botones creado")
+        
+        bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=call.message.message_id,
+                text=texto,
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+
+        bot.answer_callback_query(call.id)
+
     
-    # Si no hay TelegramID, no podemos enviar mensaje
-    if not estudiante or not estudiante.get(USUARIO_ID_TELEGRAM):
-        return False
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(VOLVER_VALORACIONES))
+    def handle_volver_valoraciones(call):
+        chat_id = call.message.chat.id
+        user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0]
+        class SimpleMessage:
+                def __init__(self, chat_id, user_id, text):
+                    self.chat = types.Chat(chat_id, 'private')
+                    self.from_user = types.User(user_id, False, 'Usuario')
+                    self.text = text
+
+        # Crear el mensaje simplificado
+        msg = SimpleMessage(chat_id, user[USUARIO_ID_TELEGRAM], f'/{COMMAND_VER_VALORACIONES}')
+        
+        texto, markup = handle_ver_valoraciones(msg,True)
+
+        bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=call.message.message_id,
+                text=texto,
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+        
+
     
-    chat_id = estudiante[USUARIO_ID_TELEGRAM]
-    
-    # Obtener datos del profesor
-    profesor = get_usuarios(USUARIO_ID=profesor_id)[0]
-    
-    if not profesor:
-        bot.send_message(chat_id, "❌ Profesor no encontrado")
-        return False
-    
-    # Guardar datos para el flujo de valoración
-    user_data[chat_id] = {
-        PROFESOR_ID: profesor_id, 
-        PROFESOR_NOMBRE: profesor[USUARIO_NOMBRE],
-        ESTUDIANTE_ID: estudiante_id,
-        GRUPO_ID: grupo_id
-    }
-    
-    # Mostrar opciones de valoración (con estrellas)
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    buttons = [
-        types.InlineKeyboardButton("⭐", callback_data="{PUNTOS}1"),
-        types.InlineKeyboardButton("⭐⭐", callback_data="{PUNTOS}2"),
-        types.InlineKeyboardButton("⭐⭐⭐", callback_data="{PUNTOS}3"),
-        types.InlineKeyboardButton("⭐⭐⭐⭐", callback_data="{PUNTOS}4"),
-        types.InlineKeyboardButton("⭐⭐⭐⭐⭐", callback_data="{PUNTOS}5")
-    ]
-    markup.add(*buttons)
-    
-    # Enviar nuevo mensaje
-    bot.edit_message_text(
-        chat_id=chat_id,
-        text=f"Vas a valorar la tutoría con: *{profesor[USUARIO_NOMBRE]}*\n\n¿Qué puntuación le darías?",
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
-    
-    return True

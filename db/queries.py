@@ -338,7 +338,7 @@ def insert_valoracion(evaluador_id, profesor_id, puntuacion, comentario, fecha, 
     cursor = get_cursor()
     try:
         cursor.execute(
-            f"""INSERT INTO {VALORACIONES} ({VALORACION_ID_EVALUADOR}, {VALORACION_ID_PROFESOR}, {VALORACION_PUNTUACION}, {VALORACION_COMENTARIO}, {VALORACION_FECHA}, {VALORACION_ES_ANONIMO}, {VALORACION_ID_SALA})
+            f"""INSERT INTO {VALORACIONES} ({VALORACION_ID_EVALUADOR}, {VALORACION_ID_PROFESOR}, {VALORACION_PUNTUACION}, {VALORACION_COMENTARIO}, {VALORACION_FECHA}, {VALORACION_ES_ANONIMA}, {VALORACION_ID_SALA})
             VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, grupo_id)
         )
