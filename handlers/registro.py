@@ -6,11 +6,15 @@ import os
 import time
 import random
 import logging
-from datetime import datetime
 from email.message import EmailMessage
 import smtplib
 from pathlib import Path
 
+from db.constantes import USUARIO_TIPO, USUARIO_TIPO_ESTUDIANTE
+from handlers.grupos import COMMAND_CREAR_GRUPO_TUTORIA
+from handlers.horarios import COMMAND_CONFIGURAR_HORARIO
+from handlers.tutorias import COMMAND_TUTORIA
+from handlers.valoraciones import COMMAND_VALORAR_PROFESOR, COMMAND_VER_VALORACIONES
 from utils.state_manager import *
 
 # Añadir directorio raíz al path para resolver importaciones
@@ -30,6 +34,10 @@ token_intentos_fallidos = {}  # {chat_id: número de intentos}
 token_bloqueados = {}  # {chat_id: tiempo de desbloqueo}
 token_usados = set()  # Conjunto de tokens ya utilizados
 
+# No puedo importarlos de main
+COMMAND_HELP = "help"
+COMMAND_VER_MIS_DATOS = "ver_misdatos"
+
 COMMAND_START = "start"
 
 # Calldata
@@ -43,11 +51,8 @@ STATE_CONFIRMAR_DATOS = "confirmando_datos_excel"
 # Configurar logger
 logger = logging.getLogger("registro")
 if not logger.handlers:
-    handler = logging.FileHandler("logs/registro.log")
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', filename='logs/registro.log')
+
 
 def register_handlers(bot):
     """Registra todos los handlers del proceso de registro"""
@@ -135,6 +140,8 @@ def register_handlers(bot):
     def handle_start(message):
         """Inicia el proceso de registro simplificado"""
         chat_id = message.chat.id
+
+        setup_commands(chat_id)
 
         # Verifica si el usuario ya está registrado
         if get_usuarios(USUARIO_ID_TELEGRAM=chat_id) != []:
@@ -319,6 +326,8 @@ def register_handlers(bot):
                     user = get_usuarios(USUARIO_EMAIL=email)[0]  # Verificar que el email existe
                     update_usuario(user[USUARIO_ID], USUARIO_REGISTRADO=USUARIO_SI_REGISTRADO, USUARIO_ID_TELEGRAM=message.from_user.id)
                     logger.info(f"Usuario {email} verificado correctamente. TelegramID actualizado.")
+
+                    setup_commands(chat_id)
                     
                     # Enviar mensaje de bienvenida
                     handle_registration_completion(chat_id, tipo_usuario)
@@ -366,14 +375,42 @@ def register_handlers(bot):
             mensaje,
             parse_mode="Markdown"
         )
-        
-        # Enviar mensaje de bienvenida personalizado
-        try:
-            from main import enviar_mensaje_bienvenida
-            enviar_mensaje_bienvenida(chat_id, user_data[chat_id][USUARIO_TIPO])
-        except Exception as e:
-            logger.error(f"Error al enviar mensaje de bienvenida: {e}")
             
         # Limpiar estado para terminar el registro
         clear_state(chat_id)
         bot.answer_callback_query(call.id, "✅ Registro completado")
+
+
+    def setup_commands(chat_id = ""):
+        """Configura los comandos que aparecen en el menú del bot"""
+        try:
+            bot.delete_my_commands(scope=telebot.types.BotCommandScopeChat(chat_id))
+            user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)
+            if user and user[0][USUARIO_TIPO] == USUARIO_TIPO_ESTUDIANTE:
+                bot.set_my_commands([
+                    telebot.types.BotCommand(f"/{COMMAND_START}", "Inicia el bot, el registro y actualiza el menu de comandos"),
+                    telebot.types.BotCommand(f"/{COMMAND_HELP}", "Muestra la ayuda del bot"),
+                    telebot.types.BotCommand(f"/{COMMAND_TUTORIA}", "Ver profesores disponibles para tutoría"),
+                    telebot.types.BotCommand(f"/{COMMAND_VALORAR_PROFESOR}", "Valora un profesor"),
+                    telebot.types.BotCommand(f"/{COMMAND_VER_MIS_DATOS}", "Ver tus datos registrados")
+                ], scope=telebot.types.BotCommandScopeChat(chat_id))
+            elif user and user[0][USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
+                bot.set_my_commands([
+                    telebot.types.BotCommand(f"/{COMMAND_START}", "Inicia el bot, el registro y actualiza el menu de comandos"),
+                    telebot.types.BotCommand(f"/{COMMAND_HELP}", "Muestra la ayuda del bot"),
+                    telebot.types.BotCommand(f"/{COMMAND_VER_VALORACIONES}", "Ver valoraciones tuyas de alumnos"),
+                    telebot.types.BotCommand(f"/{COMMAND_CREAR_GRUPO_TUTORIA}", "Crea un grupo de tutoría"),
+                    telebot.types.BotCommand(f"/{COMMAND_CONFIGURAR_HORARIO}", "Configura tu horario de tutorías"),
+                    telebot.types.BotCommand(f"/{COMMAND_VER_MIS_DATOS}", "Ver tus datos registrados")
+                ], scope=telebot.types.BotCommandScopeChat(chat_id))
+            else:
+                bot.set_my_commands([
+                    telebot.types.BotCommand(f"/{COMMAND_START}", "Inicia el bot, el registro y actualiza el menu de comandos"),
+                    telebot.types.BotCommand(f"/{COMMAND_HELP}", "Muestra la ayuda del bot"),
+                ], scope=telebot.types.BotCommandScopeChat(chat_id))
+                
+            print("✅ Comandos del bot configurados correctamente")
+            return True
+        except Exception as e:
+            print(f"❌ Error al configurar los comandos del bot: {e}")
+            return False

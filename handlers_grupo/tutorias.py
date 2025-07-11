@@ -5,7 +5,7 @@ from telebot import types
 import time
 
 from handlers_grupo.utils import configurar_logger
-from utils.state_manager import get_state
+from utils.state_manager import clear_state, get_state
 
 logger = configurar_logger()
 
@@ -24,6 +24,8 @@ def register_handlers(bot):
         print(f"⚠️ Chat ID: {chat_id} | User ID: {user_id}")
         print(f"⚠️ Usuario: {message.from_user.first_name}")
         print("==================================================\n")
+
+        bot.delete_message(chat_id, message.id)
 
         try:
             # Verificar que estamos en una grupo de tutoría
@@ -65,6 +67,7 @@ def register_handlers(bot):
                     # Expulsar al estudiante (ban temporal de 30 segundos)
                     until_date = int(time.time()) + 30
                     bot.ban_chat_member(chat_id, estudiante_id, until_date=until_date)
+                    clear_state(chat_id)
 
                     # Enviar mensaje privado al estudiante
                     try:
@@ -109,6 +112,7 @@ def register_handlers(bot):
                     # Expulsar al usuario (ban temporal de 30 segundos)
                     until_date = int(time.time()) + 30
                     bot.ban_chat_member(chat_id, user_id, until_date=until_date)
+                    clear_state(chat_id)
 
                     # Enviar mensaje privado al estudiante
                     try:

@@ -82,22 +82,12 @@ def register_handlers(bot):
         # Verificar si ya tiene grupo de tutoría privada
         tiene_privada = get_grupos_tutoria(GRUPO_ID_USUARIO=profesor_id, GRUPO_TIPO=GRUPO_PRIVADO) != []
 
-        # Depuración - Mostrar grupos actuales
-        grupos_actuales = get_grupos_tutoria(GRUPO_ID_USUARIO=profesor_id)
-        print(f"\n--- grupoS ACTUALES PARA PROFESOR ID {profesor_id} ---")
-        for grupo in grupos_actuales:
-            # Usar operador ternario para manejar valores nulos
-            nombre_asignatura = grupo[GRUPO_ASIGNATURA] if grupo[GRUPO_ASIGNATURA] is not None else 'N/A'
-            print(f"grupo ID: {grupo[GRUPO_ID]}, Nombre: {grupo[GRUPO_NOMBRE]}, " +
-                  f"Asignatura ID: {grupo[GRUPO_ID_ASIGNATURA]}, Asignatura: {nombre_asignatura}")
-        print("--- FIN grupoS ACTUALES ---\n")
-
 
         # Verificar si hay asignaturas disponibles
         if not asignaturas_disponibles and not (not tiene_privada):
             mensaje = "⚠️ No hay más asignaturas disponibles para configurar."
             if tiene_privada:
-                mensaje += "\n\nYa tienes una grupo configurada para cada asignatura y una grupo de tutoría privada."
+                mensaje += "\n\nYa tienes un grupo configurado para cada asignatura y una grupo de tutoría privado."
             bot.send_message(chat_id, mensaje)
             return
 
@@ -138,7 +128,7 @@ def register_handlers(bot):
 
         # Si ya tiene grupo privada, informarle
         if tiene_privada:
-            mensaje += "\n\n*Nota:* Ya tienes una grupo de tutoría privada configurada, por lo que esa opción no está disponible."
+            mensaje += "\n\n*Nota:* Ya tienes un grupo de tutoría privado configurado, por lo que esa opción no está disponible."
 
         bot.send_message(
             chat_id,
@@ -212,12 +202,12 @@ def register_handlers(bot):
             )
 
             # Enviar mensaje informativo
-            descripcion = "Esta es una grupo para **avisos generales** de la asignatura donde los estudiantes pueden unirse mediante el enlace de invitación."
+            descripcion = "Este es un grupo para **avisos generales** de la asignatura donde los estudiantes pueden unirse mediante el enlace de invitación."
 
             bot.send_message(
                 chat_id,
-                f"🎓 *grupo configurada*\n\n"
-                f"Esta grupo está ahora configurada como: *grupo de Avisos*\n\n"
+                f"🎓 *grupo configurado*\n\n"
+                f"Este grupo está ahora configurado como: *grupo de Avisos*\n\n"
                 f"{descripcion}\n\n"
                 "Como profesor puedes:\n"
                 "• Gestionar el grupo según el propósito configurado\n"
@@ -293,12 +283,12 @@ def register_handlers(bot):
             )
 
             # Enviar mensaje informativo
-            descripcion = "Esta es tu grupo de **tutorías privadas** donde solo pueden entrar estudiantes que invites específicamente."
+            descripcion = "Este es tu grupo de **tutorías privadas** donde solo pueden entrar estudiantes que invites específicamente."
 
             bot.send_message(
                 chat_id,
-                f"🎓 *grupo configurada*\n\n"
-                f"Esta grupo está ahora configurada como: *grupo de Tutorías Privadas*\n\n"
+                f"🎓 *grupo configurado*\n\n"
+                f"Este grupo está ahora configurado como: *grupo de Tutorías Privadas*\n\n"
                 f"{descripcion}\n\n"
                 "Como profesor puedes:\n"
                 "• Invitar a estudiantes específicos para tutorías\n"

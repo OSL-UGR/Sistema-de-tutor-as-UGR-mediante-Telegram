@@ -1,12 +1,10 @@
 import telebot
 import time
-import threading
 from telebot import types
-import os
 import sys
 from config import BOT_TOKEN, DB_PATH,EXCEL_PATH
 from db.db import close_connection
-from db.queries import get_grupos_tutoria, get_matriculas, get_usuarios
+from db.queries import get_grupos_tutoria, get_matriculas, get_usuarios, insert_asignatura
 from db.constantes import *
 
 COMMAND_HELP = "help"
@@ -15,35 +13,6 @@ COMMAND_VER_MIS_DATOS = "ver_misdatos"
 # Reemplaza todos los handlers universales por este ÚNICO handler al final
 # Inicializar el bot de Telegram
 bot = telebot.TeleBot(BOT_TOKEN) 
-
-def escape_markdown(text):
-    """Escapa caracteres especiales de Markdown"""
-    if not text:
-        return ""
-    
-    chars = ['_', '*', '`', '[', ']', '(', ')', '#', '+', '-', '.', '!']
-    for char in chars:
-        text = text.replace(char, '\\' + char)
-    
-    return text
-
-def setup_commands():
-    """Configura los comandos que aparecen en el menú del bot"""
-    try:
-        bot.set_my_commands([
-            telebot.types.BotCommand(f"/{COMMAND_START}", "Inicia el bot y el registro"),
-            telebot.types.BotCommand(f"/{COMMAND_HELP}", "Muestra la ayuda del bot"),
-            telebot.types.BotCommand(f"/{COMMAND_TUTORIA}", "Ver profesores disponibles para tutoría"),
-            telebot.types.BotCommand(f"/{COMMAND_VALORAR_PROFESOR}", "Valora un profesor"),
-            telebot.types.BotCommand(f"/{COMMAND_CREAR_GRUPO_TUTORIA}", "Crea un grupo de tutoría"),
-            telebot.types.BotCommand(f"/{COMMAND_CONFIGURAR_HORARIO}", "Configura tu horario de tutorías"),
-            telebot.types.BotCommand(f"/{COMMAND_VER_MIS_DATOS}", "Ver tus datos registrados")
-        ])
-        print("✅ Comandos del bot configurados correctamente")
-        return True
-    except Exception as e:
-        print(f"❌ Error al configurar los comandos del bot: {e}")
-        return False
 
 @bot.message_handler(commands=[COMMAND_HELP])
 def handle_help(message):
@@ -61,7 +30,7 @@ def handle_help(message):
     
     help_text = (
         "🤖 *Comandos disponibles:*\n\n"
-        f"/{COMMAND_START} - Inicia el bot y el proceso de registro\n"
+        f"/{COMMAND_START} - Inicia el bot, el registro y actualiza el menu de comandos\n"
         f"/{COMMAND_HELP} - Muestra este mensaje de ayuda\n"
         
     )
@@ -76,6 +45,7 @@ def handle_help(message):
         help_text += (
             f"/{COMMAND_CONFIGURAR_HORARIO} - Configura tu horario de tutorías\n"
             f"/{COMMAND_CREAR_GRUPO_TUTORIA} - Crea un grupo de tutoría\n"
+            f"/{COMMAND_VER_VALORACIONES} - Muestra datos de tus valoraciones\n"
         )
     
     # Escapar los guiones bajos para evitar problemas de formato
@@ -132,7 +102,7 @@ def handle_ver_misdatos(message):
             # Convertir cada matrícula a diccionario si es necesario
             m_dict = dict(m) if hasattr(m, 'keys') else m
             asignatura = m_dict.get(MATRICULA_ASIGNATURA, 'Desconocida')
-            user_info += f"- {asignatura}\n"
+            user_info += f"  - {asignatura}\n"
     else:
         user_info += "No tienes asignaturas matriculadas.\n"
     
@@ -207,7 +177,7 @@ from handlers.registro import COMMAND_START, register_handlers as register_regis
 from handlers.tutorias import COMMAND_TUTORIA, register_handlers as register_tutorias_handlers
 from handlers.grupos import COMMAND_CREAR_GRUPO_TUTORIA, EDIT_GRUPO, register_handlers as register_grupos_handlers
 from handlers.horarios import COMMAND_CONFIGURAR_HORARIO, register_handlers as register_horarios_handlers
-from handlers.valoraciones import COMMAND_VALORAR_PROFESOR, register_handlers as register_valoraciones_handlers
+from handlers.valoraciones import COMMAND_VALORAR_PROFESOR, COMMAND_VER_VALORACIONES, register_handlers as register_valoraciones_handlers
 
 # Registrar todos los handlers
 register_registro_handlers(bot)
@@ -219,13 +189,7 @@ register_grupos_handlers(bot)
 def setup_polling():
     """Configura el polling para el bot y maneja errores"""
     print("🤖 Iniciando el bot...")
-    try:
-        # Configurar comandos disponibles
-        if setup_commands():
-            print("✅ Comandos configurados correctamente")
-        else:
-            print("⚠️ Error al configurar comandos")
-        
+    try:        
         # Agregar esta línea:
         print("⚙️ Configurando polling con eventos de grupo...")
         
@@ -235,6 +199,7 @@ def setup_polling():
             long_polling_timeout=5,
             allowed_updates=["message", "callback_query", "my_chat_member", "chat_member"]
         )
+
     except KeyboardInterrupt:
         print("👋 Bot detenido manualmente")
         sys.exit(0)

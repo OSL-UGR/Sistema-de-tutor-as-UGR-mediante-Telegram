@@ -34,23 +34,6 @@ RECHAZAR_TUTORIA = "rechazar_tutoria_"
 
 GENERAL = "general"
 
-# Añadir la función directamente en este archivo
-def escape_markdown(text: str) -> str:
-    """Escapa caracteres especiales de Markdown para evitar errores de formato"""
-    if not text:
-        return ""
-        
-    # Caracteres que necesitan escape en Markdown
-    markdown_chars = ['_', '*', '`', '[', ']', '(', ')', '#', '+', '-', '.', '!']
-    
-    # Reemplazar cada caracter especial con su versión escapada
-    result = text
-    for char in markdown_chars:
-        result = result.replace(char, '\\' + char)
-        
-    return result
-
-
 
 def register_handlers(bot):
     """Registra todos los handlers de tutorías"""
@@ -195,9 +178,23 @@ def register_handlers(bot):
         # Mejorar la parte que genera el mensaje y muestra las grupos
         for profesor_id, prof_info in profesores.items():
             # Sección del profesor
-            mensaje = f"👨‍🏫 *Profesor: {escape_markdown(prof_info[USUARIO_NOMBRE])}*\n"
-            mensaje += f"📧 Email: {escape_markdown(prof_info[USUARIO_EMAIL])}\n"
-            mensaje += f"🕗 Horario: {escape_markdown(prof_info[USUARIO_HORARIO])}\n\n"
+            mensaje = f"👨‍🏫 *Profesor: {prof_info[USUARIO_NOMBRE]}*\n"
+            mensaje += f"📧 Email: {prof_info[USUARIO_EMAIL]}\n"
+            mensaje += f"🕗 Horario:"
+
+            dias = prof_info[USUARIO_HORARIO].split(', ')
+            
+            dia_anterior = ""
+            for dia in dias:
+                dia = dia.split(' ')
+                if dia[0] != dia_anterior:
+                    mensaje += f"\n  -{dia[0]} {dia[1]}"
+                else:
+                    mensaje += f", {dia[1]}"
+                dia_anterior = dia[0]
+                
+
+            mensaje += "\n\n"
             
             markup = types.InlineKeyboardMarkup()  # Crear markup para botones
             
@@ -221,7 +218,7 @@ def register_handlers(bot):
             
             for asignatura_id, asignatura in prof_info[MATRICULAS].items():
                 if asignatura_id != GENERAL:  # Solo las asignaturas regulares, no la categoría "general"
-                    nombre = escape_markdown(asignatura[ASIGNATURA_NOMBRE])
+                    nombre = asignatura[ASIGNATURA_NOMBRE]
                     codigo = asignatura.get(ASIGNATURA_CODIGO, '') or ''
                     
                     # Mostrar información de la asignatura
@@ -240,7 +237,7 @@ def register_handlers(bot):
                     if grupos_asignatura:
                         for grupo in grupos_asignatura:
                             proposito = grupo.get(GRUPO_PROPOSITO, '').lower() if grupo.get(GRUPO_PROPOSITO) else GENERAL
-                            nombre_grupo = escape_markdown(grupo.get(GRUPO_NOMBRE, 'grupo sin nombre'))
+                            nombre_grupo = grupo.get(GRUPO_NOMBRE, 'grupo sin nombre')
                             
                             # Seleccionar emoji según el propósito
                             emoji = "📢" if proposito == GRUPO_PROPOSITO_AVISOS else "👥" if proposito == GRUPO_PROPOSITO_GRUPAL else "🔵"
@@ -267,7 +264,7 @@ def register_handlers(bot):
                 mensaje += "🌐 *grupos Generales:*\n"
                 for grupo in grupos_generales_no_privados:
                     proposito = grupo.get(GRUPO_PROPOSITO, '').lower() if grupo.get(GRUPO_PROPOSITO) else GENERAL
-                    nombre_grupo = escape_markdown(grupo.get(GRUPO_NOMBRE, 'grupo sin nombre'))
+                    nombre_grupo = grupo.get(GRUPO_NOMBRE, 'grupo sin nombre')
                     
                     # Seleccionar emoji según el propósito
                     emoji = "📢" if proposito == GRUPO_PROPOSITO_AVISOS else "👥" if proposito == GRUPO_PROPOSITO_GRUPAL else "🔵"
@@ -363,15 +360,28 @@ def register_handlers(bot):
             if not es_horario_tutoria:
                 # No estamos en horario de tutoría
                 bot.answer_callback_query(call.id, "⏰ No es horario de tutoría del profesor.")
+
+                texto = (f"⏰ *No es horario de tutoría*\n\n"
+                        f"El profesor {profesor[USUARIO_NOMBRE]} {profesor[USUARIO_APELLIDOS] or ''} "
+                        f"tiene el siguiente horario de tutorías:")
+
+                dias = profesor[USUARIO_HORARIO].split(', ')
+            
+                dia_anterior = ""
+                for dia in dias:
+                    dia = dia.split(' ')
+                    if dia[0] != dia_anterior:
+                        texto += f"\n  -{dia[0]} {dia[1]}"
+                    else:
+                        texto += f", {dia[1]}"
+                    dia_anterior = dia[0]
                 
+                texto += f"\n\nPor favor, intenta solicitar acceso durante estos horarios."
+
                 # Informar al estudiante con más detalle
                 bot.send_message(
                     chat_id,
-                    f"⏰ *No es horario de tutoría*\n\n"
-                    f"El profesor {escape_markdown(profesor[USUARIO_NOMBRE])} {escape_markdown(profesor[USUARIO_APELLIDOS] or '')} "
-                    f"tiene el siguiente horario de tutorías:\n\n"
-                    f"{escape_markdown(profesor[USUARIO_HORARIO])}\n\n"
-                    f"Por favor, intenta solicitar acceso durante estos horarios.",
+                    texto,
                     parse_mode="Markdown"
                 )
                 return
@@ -383,12 +393,12 @@ def register_handlers(bot):
             # Crear mensaje de notificación para el profesor
             mensaje_profesor = (
                 f"🔔 *Solicitud de tutoría privado*\n\n"
-                f"👤 Estudiante: {escape_markdown(estudiante_nombre)}\n"
-                f"📧 Email: {escape_markdown(user[USUARIO_EMAIL] or 'No disponible')}\n"
+                f"👤 Estudiante: {estudiante_nombre}\n"
+                f"📧 Email: {user[USUARIO_EMAIL] or 'No disponible'}\n"
             )
             
             if grupo['Asignatura']:
-                mensaje_profesor += f"📚 Asignatura: {escape_markdown(grupo[GRUPO_ASIGNATURA])}\n"
+                mensaje_profesor += f"📚 Asignatura: {grupo[GRUPO_ASIGNATURA]}\n"
             
             mensaje_profesor += (
                 f"\nEl estudiante ha solicitado acceso a tu grupo de tutorías privados."
@@ -407,7 +417,7 @@ def register_handlers(bot):
                 mensaje_estudiante = (
                     f"✅ *Solicitud de tutoría enviada*\n\n"
                     f"Tu solicitud ha sido enviada al profesor "
-                    f"{escape_markdown(profesor[USUARIO_NOMBRE])} {escape_markdown(profesor[USUARIO_APELLIDOS] or '')}.\n\n"
+                    f"{profesor[USUARIO_NOMBRE]} {profesor[USUARIO_APELLIDOS] or ''}.\n\n"
                     f"Recibirás una notificación cuando el profesor responda a tu solicitud."
                 )
                 
@@ -499,7 +509,7 @@ def register_handlers(bot):
             if grupo[GRUPO_ENLACE] and estudiante[USUARIO_ID_TELEGRAM]:
                 mensaje_estudiante = (
                     f"✅ *Tu solicitud de tutoría ha sido aprobada*\n\n"
-                    f"El profesor {escape_markdown(profesor[USUARIO_NOMBRE])} {escape_markdown(profesor[USUARIO_APELLIDOS] or '')} "
+                    f"El profesor {profesor[USUARIO_NOMBRE]} {profesor[USUARIO_APELLIDOS] or ''} "
                     f"ha aprobado tu solicitud de acceso a la grupo de tutorías.\n\n"
                     f"Usa este enlace para unirte al grupo: {grupo[GRUPO_ENLACE]}"
                 )
@@ -523,9 +533,9 @@ def register_handlers(bot):
             
             mensaje_actualizado = (
                 f"✅ *Solicitud APROBADA*\n\n"
-                f"👤 Estudiante: {escape_markdown(nombre_completo)}\n"
-                f"📧 Email: {escape_markdown(estudiante[USUARIO_EMAIL] or 'No disponible')}\n\n"
-                f"Acceso concedido a la grupo: {escape_markdown(grupo[GRUPO_NOMBRE])}"
+                f"👤 Estudiante: {nombre_completo}\n"
+                f"📧 Email: {estudiante[USUARIO_EMAIL] or 'No disponible'}\n\n"
+                f"Acceso concedido a la grupo: {grupo[GRUPO_NOMBRE]}"
             )
             
             # Eliminar los botones de aprobar/rechazar
@@ -590,9 +600,9 @@ def register_handlers(bot):
             
             mensaje_actualizado = (
                 f"❌ *Solicitud RECHAZADA*\n\n"
-                f"👤 Estudiante: {escape_markdown(nombre_completo)}\n"
-                f"📧 Email: {escape_markdown(estudiante[USUARIO_EMAIL] or 'No disponible')}\n\n"
-                f"Acceso denegado a la grupo: {escape_markdown(grupo[GRUPO_NOMBRE])}"
+                f"👤 Estudiante: {nombre_completo}\n"
+                f"📧 Email: {estudiante[USUARIO_EMAIL] or 'No disponible'}\n\n"
+                f"Acceso denegado a la grupo: {grupo[GRUPO_NOMBRE]}"
             )
             
             # Eliminar los botones de aprobar/rechazar
@@ -607,7 +617,7 @@ def register_handlers(bot):
             if estudiante[USUARIO_ID_TELEGRAM]:
                 mensaje_rechazo = (
                     f"❌ *Tu solicitud de tutoría ha sido rechazada*\n\n"
-                    f"El profesor {escape_markdown(profesor[USUARIO_NOMBRE])} {escape_markdown(profesor[USUARIO_APELLIDOS] or '')} "
+                    f"El profesor {profesor[USUARIO_NOMBRE]} {profesor[USUARIO_APELLIDOS] or ''} "
                     f"ha rechazado tu solicitud de acceso a la grupo de tutorías.\n\n"
                     f"Si necesitas más información, contacta directamente con el profesor."
                 )

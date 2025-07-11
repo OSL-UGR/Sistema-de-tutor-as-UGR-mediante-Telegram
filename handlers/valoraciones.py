@@ -292,15 +292,16 @@ def register_handlers(bot):
     def handle_ver_valoraciones(message, get_text = False):
         """Muestra valoraciones recibidas"""
         chat_id = message.chat.id
-        user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)[0]
+        user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)
 
         # Verificar que el usuario es profesor
-        if not user or user[USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
+        if not user or user[0][USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
             bot.send_message(
                 chat_id,
                 "❌ Solo los profesores pueden versus valoraciones."
             )
             return
+        user = user[0]
 
         valoraciones = get_valoraciones(VALORACION_ID_PROFESOR=user[USUARIO_ID])
         total = 0
@@ -450,25 +451,38 @@ def register_handlers(bot):
     @bot.callback_query_handler(func=lambda call: call.data.startswith(VOLVER_VALORACIONES))
     def handle_volver_valoraciones(call):
         chat_id = call.message.chat.id
-        user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0]
         class SimpleMessage:
                 def __init__(self, chat_id, user_id, text):
                     self.chat = types.Chat(chat_id, 'private')
                     self.from_user = types.User(user_id, False, 'Usuario')
                     self.text = text
 
-        # Crear el mensaje simplificado
-        msg = SimpleMessage(chat_id, user[USUARIO_ID_TELEGRAM], f'/{COMMAND_VER_VALORACIONES}')
-        
-        texto, markup = handle_ver_valoraciones(msg,True)
+        # Responder al callback inmediatamente
+        try:
+            bot.answer_callback_query(call.id)
+            print("✅ Callback respondido correctamente")
+        except Exception as e:
+            print(f"❌ Error al responder al callback: {e}")
 
-        bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=call.message.message_id,
-                text=texto,
-                reply_markup=markup,
-                parse_mode="Markdown"
-            )
+        try:
+            # Crear el mensaje simulado
+            msg = SimpleMessage(chat_id, chat_id, f'/{COMMAND_VER_VALORACIONES}')
+
+            texto, markup = handle_ver_valoraciones(msg, True)
+
+            bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=call.message.message_id,
+                    text=texto,
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            print(f"❌ Error al llamar a handle_ver_valoraciones: {str(e)}")
+            import traceback
+            print("📋 Traza de error completa:")
+            traceback.print_exc()
+            bot.send_message(chat_id, f"❌ Error al volver a las valoraciones. Intenta usar /{COMMAND_VER_VALORACIONES} directamente.")
         
 
     

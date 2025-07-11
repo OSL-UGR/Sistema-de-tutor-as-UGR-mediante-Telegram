@@ -114,7 +114,7 @@ def get_usuarios_by_multiple_ids(usuarios_ids):
 ##========================
 
 ##No se usa
-def insert_asignatura(nombre, codigo, id_carrera = None, do_commit=True):
+def insert_asignatura(nombre, codigo = None, id_carrera = None, do_commit=True):
     cursor = get_cursor()
     try:
         cursor.execute(

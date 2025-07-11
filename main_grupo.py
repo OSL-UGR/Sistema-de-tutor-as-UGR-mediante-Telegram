@@ -111,7 +111,7 @@ def send_welcome(message):
                     bot.send_message(
                         chat_id,
                         "👨‍🏫 *Bot de tutoría activo*\n\n"
-                        "Este grupo está configurado como grupo de tutoría. Usa el boton o haz /finalizar para gestionarla.",
+                        "Este grupo está configurado como grupo de tutoría. Cuando recivas peticiones en el otro bot, si las aceptas, se invitaran alumnos al grupo.",
                         reply_markup=menu_profesor(),
                         parse_mode="Markdown"
                     )
@@ -136,7 +136,7 @@ def send_welcome(message):
         if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
             bot.send_message(
                 chat_id,
-                "¡Bienvenido, Profesor! Usa los botones para gestionar tus tutorías.",
+                f"¡Bienvenido, Profesor! Invitame a un grupo, dame permisos de administrador y ejecuta /{COMMAND_CONFIGURAR_GRUPO} para establecer un grupo",
                 reply_markup=menu_profesor()
             )
         else:

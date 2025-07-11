@@ -17,6 +17,7 @@ DB_PATH = BASE_DIR / "tutoria_ugr.db"
 # Configuración del bot
 BOT_TOKEN = os.getenv("BOT_TOKEN", "TU_TOKEN_AQUI")
 BOT_TOKEN_GRUPO = os.getenv("BOT_TOKEN_GRUPO", "tu_token_del_bot_para_grupos_aquí")
+BOT_GRUPO_NOMBRE = os.getenv("BOT_GRUPO_NOMBRE", "nombre_bot")
 
 # Configuración de email
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")

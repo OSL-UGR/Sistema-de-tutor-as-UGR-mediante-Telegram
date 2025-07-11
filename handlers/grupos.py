@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import telebot
+from config import BOT_GRUPO_NOMBRE
 from db.queries import delete_grupo_tutoria, get_grupos_tutoria, get_usuarios
 from db.constantes import *
 
@@ -24,16 +25,6 @@ VER_GRUPOS = "ver_grupos"
 VOLVER_INSTRUCCIONES = "volver_instrucciones"
 FAQ_GRUPO = "faq_grupo"
 
-def escape_markdown(text):
-    """Escapa caracteres especiales de Markdown"""
-    if not text:
-        return ""
-    
-    chars = ['_', '*', '`', '[', ']', '(', ')', '#', '+', '-', '.', '!']
-    for char in chars:
-        text = text.replace(char, '\\' + char)
-    
-    return text
 
 def register_handlers(bot):
 
@@ -85,8 +76,8 @@ def register_handlers(bot):
             ))
 
             # Preparar textos seguros para Markdown
-            nombre_grupo = escape_markdown(grupo[GRUPO_NOMBRE])
-            nombre_asignatura = escape_markdown(grupo[GRUPO_ASIGNATURA] or 'General')
+            nombre_grupo = grupo[GRUPO_NOMBRE]
+            nombre_asignatura = grupo[GRUPO_ASIGNATURA] or 'General'
 
             print(f"📤 Enviando mensaje de edición")
             bot.edit_message_text(
@@ -113,12 +104,32 @@ def register_handlers(bot):
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith(CANCELAR_EDICION))
     def handle_cancelar_edicion(call):
-        """Cancela la edición de la grupo"""
-        bot.edit_message_text(
-            "❌ Operación cancelada. No se realizaron cambios.",
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id
-        )
+        """Cancela la edición de el grupo"""
+        chat_id = call.message.chat.id
+
+        # Responder al callback inmediatamente
+        try:
+            bot.answer_callback_query(call.id)
+            print("✅ Callback respondido correctamente")
+        except Exception as e:
+            print(f"❌ Error al responder al callback: {e}")
+
+        try:
+            texto, markup = handle_ver_grupos(call, True)
+
+            bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=call.message.message_id,
+                    text=texto,
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            print(f"❌ Error al llamar a handler_ver_grupos: {str(e)}")
+            import traceback
+            print("📋 Traza de error completa:")
+            traceback.print_exc()
+            bot.send_message(chat_id, f"❌ Error al volver a los grupos. Intenta pulsar el boton \"Ver mis grupos directamente.")
         bot.answer_callback_query(call.id)
 
 
@@ -129,7 +140,7 @@ def register_handlers(bot):
         print(f"\n\n### INICIO ELIMINAR_grupo - Callback: {call.data} ###")
 
         try:
-            grupo_id = int(call.data.split("_")[1])
+            grupo_id = int(call.data.split("_")[2])
             print(f"🔍 grupo ID a eliminar: {grupo_id}")
 
             # Verificar que el usuario es el propietario de la grupo
@@ -152,8 +163,8 @@ def register_handlers(bot):
 
 
             # Preparar textos seguros para Markdown
-            nombre_grupo = escape_markdown(grupo[GRUPO_NOMBRE])
-            nombre_asignatura = escape_markdown(grupo[GRUPO_ASIGNATURA] or 'General')
+            nombre_grupo = grupo[GRUPO_NOMBRE]
+            nombre_asignatura = grupo[GRUPO_ASIGNATURA] or 'General'
 
             # Confirmar la eliminación con botones
             markup = types.InlineKeyboardMarkup(row_width=1)
@@ -231,7 +242,7 @@ def register_handlers(bot):
             print("4️⃣ Enviando confirmación al usuario...")
             bot.edit_message_text(
                 f"✅ *grupo eliminado con éxito*\n\n"
-                f"El grupo \"{escape_markdown(nombre_grupo)}\" ha sido eliminado completamente.\n"
+                f"El grupo \"{nombre_grupo}\" ha sido eliminado completamente.\n"
                 f"Todos los registros asociados han sido eliminados.",
                 chat_id=chat_id,
                 message_id=call.message.message_id,
@@ -254,7 +265,7 @@ def register_handlers(bot):
 
 
     @bot.callback_query_handler(func=lambda call: call.data == VER_GRUPOS)
-    def handler_ver_grupos(call):
+    def handle_ver_grupos(call, is_return = False):
         """Muestra las grupos actuales del usuario"""
         chat_id = call.message.chat.id
         user_id = call.from_user.id
@@ -308,7 +319,8 @@ def register_handlers(bot):
 
         # Solución para evitar crear un mensaje simulado
         try:
-            bot.send_message(chat_id, user_info, parse_mode="Markdown")
+            if not is_return:
+                bot.send_message(chat_id, user_info, parse_mode="Markdown")
 
             # Si es profesor y tiene grupos, mostrar botones para editar
             if get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_TIPO] == USUARIO_TIPO_PROFESOR and grupos and len(grupos) > 0:
@@ -322,12 +334,15 @@ def register_handlers(bot):
                         f"✏️ grupo: {grupo[GRUPO_NOMBRE]}",
                         callback_data=f"{EDIT_GRUPO}{grupo_id}"
                     ))
-            
-                bot.send_message(
-                    chat_id,
-                    "Selecciona una grupo para gestionar:",
-                    reply_markup=markup
-                )
+
+                if not is_return:
+                    bot.send_message(
+                        chat_id,
+                        "Selecciona una grupo para gestionar:",
+                        reply_markup=markup
+                    )
+                else:
+                    return "Selecciona una grupo para gestionar:", markup
         except Exception as e:
             print(f"❌ Error al llamar a handle_ver_misdatos: {str(e)}")
             import traceback
@@ -339,7 +354,7 @@ def register_handlers(bot):
 
 
     @bot.message_handler(commands=[COMMAND_CREAR_GRUPO_TUTORIA])
-    def crear_grupo(message):
+    def crear_grupo(message, is_return = False):
         """Proporciona instrucciones para crear un grupo de tutoría en Telegram"""
         chat_id = message.chat.id
         user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)[0]
@@ -364,7 +379,7 @@ def register_handlers(bot):
             "2️⃣ Añadir el bot al grupo\n"
             "• Pulse el nombre del grupo\n"
             "• Seleccione 'Administradores'\n"
-            "• Añada a @UGRBot como administrador\n"
+            f"• Añada a al bot de grupos {BOT_GRUPO_NOMBRE} como administrador\n"
             "• Active todos los permisos\n\n"
 
             "3️⃣ Configurar el grupo\n"
@@ -398,11 +413,14 @@ def register_handlers(bot):
 
         # Enviar mensaje SIN formato markdown para evitar errores
         try:
-            bot.send_message(
-                chat_id,
-                instrucciones,
-                reply_markup=markup
-            )
+            if not is_return:
+                bot.send_message(
+                    chat_id,
+                    instrucciones,
+                    reply_markup=markup
+                )
+            else:
+                return instrucciones, markup
         except Exception as e:
             print(f"Error al enviar instrucciones de creación de grupo: {e}")
             bot.send_message(
@@ -414,16 +432,13 @@ def register_handlers(bot):
 
 
     @bot.callback_query_handler(func=lambda call: call.data == VOLVER_INSTRUCCIONES)
-    def handler_volver_instrucciones(call):
-        """Vuelve a mostrar las instrucciones originales"""
+    def handle_volver_instrucciones(call):
         chat_id = call.message.chat.id
-        user_id = call.from_user.id
-
-        # Depuración adicional
-        print(f"\n\n### INICIO VOLVER_INSTRUCCIONES CALLBACK ###")
-        print(f"🔍 Callback data: {call.data}")
-        print(f"👤 User ID: {user_id}, Chat ID: {chat_id}")
-        print(f"📝 Message ID: {call.message.message_id}")
+        class SimpleMessage:
+                def __init__(self, chat_id, user_id, text):
+                    self.chat = types.Chat(chat_id, 'private')
+                    self.from_user = types.User(user_id, False, 'Usuario')
+                    self.text = text
 
         # Responder al callback inmediatamente
         try:
@@ -432,32 +447,25 @@ def register_handlers(bot):
         except Exception as e:
             print(f"❌ Error al responder al callback: {e}")
 
-        # Solución para evitar crear un mensaje simulado
         try:
-            print("🔄 Preparando llamada a crear_grupo...")
+            # Crear el mensaje simulado
+            msg = SimpleMessage(chat_id, chat_id, f'/{COMMAND_CREAR_GRUPO_TUTORIA}')
 
-            # Crear una clase simple que emule lo necesario de Message
-            class SimpleMessage:
-                def __init__(self, chat_id, user_id, text):
-                    self.chat = types.Chat(chat_id, 'private')
-                    self.from_user = types.User(user_id, False, 'Usuario')
-                    self.text = text
+            texto, markup = crear_grupo(msg, True)
 
-            # Crear el mensaje simplificado
-            msg = SimpleMessage(chat_id, user_id, f'/{COMMAND_CREAR_GRUPO_TUTORIA}')
-
-            # Llamar directamente a la función
-            print("🔄 Llamando a crear_grupo...")
-            crear_grupo(msg)
-            print("✅ crear_grupo llamado con éxito")
+            bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=call.message.message_id,
+                    text=texto,
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
         except Exception as e:
             print(f"❌ Error al llamar a crear_grupo: {str(e)}")
             import traceback
             print("📋 Traza de error completa:")
             traceback.print_exc()
             bot.send_message(chat_id, f"❌ Error al volver a las instrucciones. Intenta usar /{COMMAND_CREAR_GRUPO_TUTORIA} directamente.")
-
-        print("### FIN VOLVER_INSTRUCCIONES CALLBACK ###\n\n")
 
     # Handlers para los botones simplificados
     @bot.callback_query_handler(func=lambda call: call.data == FAQ_GRUPO)
