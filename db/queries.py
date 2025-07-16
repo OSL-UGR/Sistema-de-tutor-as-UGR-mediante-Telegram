@@ -1,4 +1,3 @@
-import sqlite3
 from pathlib import Path
 import sys
 import os
@@ -20,16 +19,16 @@ DB_PATH = Path(__file__).parent.parent / "tutoria_ugr.db"
 ##=====================
 
 ##No se usa
-def insert_usuario(nombre, tipo, email, telegram_id=None, apellidos=None, dni=None, carrera=None, area=None, registrado=USUARIO_NO_REGISTRADO, do_commit=True):
+def insert_usuario(nombre, tipo, email, telegram_id=None, apellidos=None, do_commit=True):
     """Crea un nuevo usuario en la base de datos con los datos proporcionados"""
     cursor = get_cursor()
     
     try:
         cursor.execute(
             f"""INSERT INTO {USUARIOS} 
-            ({USUARIO_NOMBRE}, {USUARIO_TIPO}, {USUARIO_EMAIL}, {USUARIO_ID_TELEGRAM}, {USUARIO_APELLIDOS}, {USUARIO_DNI}, {USUARIO_CARRERA}, {USUARIO_AREA}, {USUARIO_REGISTRADO}) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (nombre, tipo, email, telegram_id, apellidos, dni, carrera, area, registrado)
+            ({USUARIO_NOMBRE}, {USUARIO_TIPO}, {USUARIO_EMAIL}, {USUARIO_ID_TELEGRAM}, {USUARIO_APELLIDOS}) 
+            VALUES ({PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER})""",
+            (nombre, tipo, email, telegram_id, apellidos)
         )
         if do_commit:
             commit()
@@ -46,8 +45,8 @@ def update_usuario(user_id, do_commit = True, **kwargs):
 
     try:
         query = f"UPDATE {USUARIOS} SET "
-        query += ", ".join([f"{USUARIO_FIELDS[k]} = ?" for k in kwargs])
-        query += f" WHERE {USUARIO_ID} = ?"
+        query += ", ".join([f"{USUARIO_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
+        query += f" WHERE {USUARIO_ID} = {PLACEHOLDER}"
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()) + [user_id])
         if do_commit:
@@ -62,7 +61,7 @@ def update_usuario(user_id, do_commit = True, **kwargs):
 def delete_usuario(user_id):
     cursor = get_cursor()
     try:
-        cursor.execute(f"DELETE FROM {USUARIOS} WHERE {USUARIO_ID} = ?", (user_id,))
+        cursor.execute(f"DELETE FROM {USUARIOS} WHERE {USUARIO_ID} = {PLACEHOLDER}", (user_id,))
         commit()
     except Exception as e:
         print(f"Error al eliminar usuario: {e}")
@@ -75,7 +74,7 @@ def get_usuarios(**kwargs):
 
         query = f"SELECT * FROM {USUARIOS} WHERE 1=1"
         for k in kwargs:
-            query += f" AND {USUARIO_FIELDS[k]} = ?"
+            query += f" AND {USUARIO_FIELDS[k]} = {PLACEHOLDER}"
             
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()))
@@ -93,12 +92,15 @@ def get_usuarios_by_multiple_ids(usuarios_ids):
     cursor = get_cursor()
 
     try:
-        placeholders = ",".join(["?" for _ in usuarios_ids])
+        placeholders = ",".join([f"{PLACEHOLDER}" for _ in usuarios_ids])
         query = f"""
             SELECT * FROM {USUARIOS}
             WHERE {USUARIO_ID} IN ({placeholders})
             ORDER BY {USUARIO_NOMBRE}, {USUARIO_APELLIDOS}
         """
+
+        print(query)
+
         cursor.execute(query, usuarios_ids)
         return [dict(row) for row in cursor.fetchall()]
 
@@ -114,12 +116,12 @@ def get_usuarios_by_multiple_ids(usuarios_ids):
 ##========================
 
 ##No se usa
-def insert_asignatura(nombre, codigo = None, id_carrera = None, do_commit=True):
+def insert_asignatura(nombre, do_commit=True):
     cursor = get_cursor()
     try:
         cursor.execute(
-            f"INSERT INTO {ASIGNATURAS} ({ASIGNATURA_NOMBRE}, {ASIGNATURA_CODIGO}, {ASIGNATURA_ID_CARRERA}) VALUES (?, ?, ?)",
-            (nombre, codigo, id_carrera)
+            f"INSERT INTO {ASIGNATURAS} ({ASIGNATURA_NOMBRE}) VALUES ({PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER})",
+            (nombre)
         )
         if do_commit:
             commit()
@@ -137,8 +139,8 @@ def update_asignatura(asignatura_id, do_commit=True,  **kwargs):
 
     try:
         query = f"UPDATE {ASIGNATURAS} SET "
-        query += ", ".join([f"{ASIGNATURA_FIELDS[k]} = ?" for k in kwargs])
-        query += f" WHERE {ASIGNATURA_ID} = ?"
+        query += ", ".join([f"{ASIGNATURA_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
+        query += f" WHERE {ASIGNATURA_ID} = {PLACEHOLDER}"
 
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()) + [asignatura_id])
@@ -154,7 +156,7 @@ def update_asignatura(asignatura_id, do_commit=True,  **kwargs):
 def delete_asignatura(asignatura_id):
     cursor = get_cursor()
     try:
-        cursor.execute(f"DELETE FROM {ASIGNATURAS} WHERE {ASIGNATURA_ID} = ?", (asignatura_id,))
+        cursor.execute(f"DELETE FROM {ASIGNATURAS} WHERE {ASIGNATURA_ID} = {PLACEHOLDER}", (asignatura_id,))
         commit()
     except Exception as e:
         print(f"Error al eliminar asignatura: {e}")
@@ -167,7 +169,7 @@ def get_asignaturas(**kwargs):
 
         query = f"SELECT * FROM {ASIGNATURAS} WHERE 1=1"
         for k in kwargs:
-            query += f" AND {ASIGNATURA_FIELDS[k]} = ?"
+            query += f" AND {ASIGNATURA_FIELDS[k]} = {PLACEHOLDER}"
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()))
         return [dict(row) for row in cursor.fetchall()]
@@ -182,16 +184,13 @@ def get_asignaturas(**kwargs):
 ## ===== Grupos_tutoria =====
 ##===========================
 
-def insert_grupo_tutoria(usuario_id, nombre, tipo, asignatura_id = None, chat_id = None, enlace_invitacion = None, proposito = None, do_commit=True):
+def insert_grupo_tutoria(usuario_id, nombre, tipo, asignatura_id = None, chat_id = None, enlace_invitacion = None, do_commit=True):
     cursor = get_cursor()
     try:
-        cursor.execute(
-            f"""INSERT INTO {GRUPOS} 
-            ({GRUPO_ID_USUARIO}, {GRUPO_NOMBRE}, {GRUPO_TIPO}, {GRUPO_ID_ASIGNATURA}, {GRUPO_ID_CHAT}, {GRUPO_ENLACE}, {GRUPO_PROPOSITO}) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (usuario_id, nombre, tipo, asignatura_id, chat_id, enlace_invitacion, proposito)
-        )
+        query = f"""INSERT INTO {GRUPOS} ({GRUPO_ID_PROFESOR}, {GRUPO_NOMBRE}, {GRUPO_TIPO}, {GRUPO_ID_ASIGNATURA}, {GRUPO_ID_CHAT}, {GRUPO_ENLACE}) 
+            VALUES ({PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER})"""
         
+        cursor.execute(query, (usuario_id, nombre, tipo, asignatura_id, chat_id, enlace_invitacion))        
         if do_commit:
             commit()
         return cursor.lastrowid
@@ -208,8 +207,8 @@ def update_grupo_tutoria(grupo_id, do_commit=True, **kwargs):
 
     try:
         query = f"UPDATE {GRUPOS} SET "
-        query += ", ".join([f"{GRUPO_FIELDS[k]} = ?" for k in kwargs])
-        query += f" WHERE {GRUPO_ID} = ?"
+        query += ", ".join([f"{GRUPO_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
+        query += f" WHERE {GRUPO_ID} = {PLACEHOLDER}"
 
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()) + [grupo_id])
@@ -224,7 +223,7 @@ def update_grupo_tutoria(grupo_id, do_commit=True, **kwargs):
 def delete_grupo_tutoria(grupo_id):
     cursor = get_cursor()
     try:
-        cursor.execute(f"DELETE FROM {GRUPOS} WHERE {GRUPO_ID} = ?", (grupo_id,))
+        cursor.execute(f"DELETE FROM {GRUPOS} WHERE {GRUPO_ID} = {PLACEHOLDER}", (grupo_id,))
         commit()
     except Exception as e:
         print(f"Error al eliminar grupo de tutoría: {e}")
@@ -238,10 +237,11 @@ def get_grupos_tutoria(**kwargs):
         query = f"""SELECT g.*, a.{ASIGNATURA_NOMBRE} as Asignatura, u.{USUARIO_NOMBRE} as Profesor, u.{USUARIO_APELLIDOS} as Apellidos_Profesor
             FROM {GRUPOS} g
             LEFT JOIN {ASIGNATURAS} a ON g.{GRUPO_ID_ASIGNATURA} = a.{ASIGNATURA_ID}
-            JOIN {USUARIOS} u ON g.{GRUPO_ID_USUARIO} = u.{USUARIO_ID}
+            JOIN {USUARIOS} u ON g.{GRUPO_ID_PROFESOR} = u.{USUARIO_ID}
             WHERE 1=1"""
+        
         for k in kwargs:
-            query += f" AND g.{GRUPO_FIELDS[k]} = ?"
+            query += f" AND g.{GRUPO_FIELDS[k]} = {PLACEHOLDER}"
 
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()))
@@ -258,12 +258,12 @@ def get_grupos_tutoria(**kwargs):
 ##=======================
 
 ##No se usa
-def insert_matricula(usuario_id, asignatura_id, curso, tipo, do_commit=True):
+def insert_matricula(usuario_id, asignatura_id, tipo, do_commit=True):
     cursor = get_cursor()
     try:
         cursor.execute(
-            f"INSERT INTO {MATRICULAS} ({MATRICULA_ID_USUARIO}, {MATRICULA_ID_ASIGNATURA}, {MATRICULA_CURSO}, {MATRICULA_TIPO}) VALUES (?, ?, ?, ?)",
-            (usuario_id, asignatura_id, curso, tipo)
+            f"INSERT INTO {MATRICULAS} ({MATRICULA_ID_USUARIO}, {MATRICULA_ID_ASIGNATURA}, {MATRICULA_TIPO}) VALUES ({PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER})",
+            (usuario_id, asignatura_id, tipo)
         )
         if do_commit:
             commit()
@@ -281,8 +281,8 @@ def update_matricula(matricula_id, do_commit=True, **kwargs):
 
     try:
         query = f"UPDATE {MATRICULAS} SET "
-        query += ", ".join([f"{MATRICULA_FIELDS[k]} = ?" for k in kwargs])
-        query += f" WHERE {MATRICULA_ID} = ?"
+        query += ", ".join([f"{MATRICULA_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
+        query += f" WHERE {MATRICULA_ID} = {PLACEHOLDER}"
 
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()) + [matricula_id])
@@ -298,7 +298,7 @@ def update_matricula(matricula_id, do_commit=True, **kwargs):
 def delete_matricula(matricula_id):
     cursor = get_cursor()
     try:
-        cursor.execute(f"DELETE FROM {MATRICULAS} WHERE {MATRICULA_ID} = ?", (matricula_id,))
+        cursor.execute(f"DELETE FROM {MATRICULAS} WHERE {MATRICULA_ID} = {PLACEHOLDER}", (matricula_id,))
         commit()
     except Exception as e:
         print(f"Error al eliminar matrícula: {e}")
@@ -309,7 +309,7 @@ def get_matriculas(**kwargs):
         if not all(k in MATRICULA_CAMPOS_VALIDOS for k in kwargs):
             raise ValueError("Campo inválido en búsqueda de Matriculas")
 
-        query = f"""SELECT m.*, a.{ASIGNATURA_NOMBRE} AS Asignatura, a.{ASIGNATURA_CODIGO} AS Codigo, u.{USUARIO_CARRERA} AS Carrera 
+        query = f"""SELECT m.*, a.{ASIGNATURA_NOMBRE} AS Asignatura
                     FROM {MATRICULAS} m
                     JOIN 
                     {ASIGNATURAS} a ON m.{MATRICULA_ID_ASIGNATURA} = a.{ASIGNATURA_ID}
@@ -317,7 +317,7 @@ def get_matriculas(**kwargs):
                     {USUARIOS} u ON m.{MATRICULA_ID_USUARIO} = u.{USUARIO_ID}
                     WHERE 1=1"""
         for k in kwargs:
-            query += f" AND m.{MATRICULA_FIELDS[k]} = ?"
+            query += f" AND m.{MATRICULA_FIELDS[k]} = {PLACEHOLDER}"
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()))
         return [dict(row) for row in cursor.fetchall()]
@@ -334,13 +334,13 @@ def get_matriculas(**kwargs):
 
 
 
-def insert_valoracion(evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, grupo_id, do_commit=True):
+def insert_valoracion(evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, do_commit=True):
     cursor = get_cursor()
     try:
         cursor.execute(
-            f"""INSERT INTO {VALORACIONES} ({VALORACION_ID_EVALUADOR}, {VALORACION_ID_PROFESOR}, {VALORACION_PUNTUACION}, {VALORACION_COMENTARIO}, {VALORACION_FECHA}, {VALORACION_ES_ANONIMA}, {VALORACION_ID_SALA})
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, grupo_id)
+            f"""INSERT INTO {VALORACIONES} ({VALORACION_ID_EVALUADOR}, {VALORACION_ID_PROFESOR}, {VALORACION_PUNTUACION}, {VALORACION_COMENTARIO}, {VALORACION_FECHA}, {VALORACION_ANONIMA})
+            VALUES ({PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER})""",
+            (evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo)
         )
         if do_commit:
             commit()
@@ -358,8 +358,8 @@ def update_valoracion(valoracion_id, do_commit=True, **kwargs):
 
     try:
         query = f"UPDATE {VALORACIONES} SET "
-        query += ", ".join([f"{VALORACION_FIELDS[k]} = ?" for k in kwargs])
-        query += f" WHERE {VALORACION_ID} = ?"
+        query += ", ".join([f"{VALORACION_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
+        query += f" WHERE {VALORACION_ID} = {PLACEHOLDER}"
 
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()) + [valoracion_id])
@@ -374,7 +374,7 @@ def update_valoracion(valoracion_id, do_commit=True, **kwargs):
 def delete_valoracion(id_valoracion):
     cursor = get_cursor()
     try:
-        cursor.execute(f"DELETE FROM {VALORACIONES} WHERE {VALORACION_ID} = ?", (id_valoracion,))
+        cursor.execute(f"DELETE FROM {VALORACIONES} WHERE {VALORACION_ID} = {PLACEHOLDER}", (id_valoracion,))
         commit()
     except Exception as e:
         print(f"Error al eliminar valoración: {e}")
@@ -387,7 +387,7 @@ def get_valoraciones(**kwargs):
 
         query = f"SELECT * FROM {VALORACIONES} WHERE 1=1"
         for k in kwargs:
-            query += f" AND {VALORACION_FIELDS[k]} = ?"
+            query += f" AND {VALORACION_FIELDS[k]} = {PLACEHOLDER}"
             
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()))

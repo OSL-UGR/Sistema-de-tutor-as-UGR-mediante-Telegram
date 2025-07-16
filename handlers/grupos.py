@@ -49,7 +49,7 @@ def register_handlers(bot):
 
             # Obtener datos actuales de la grupo
             print(f"🔍 Consultando detalles de grupo ID {grupo_id}")
-            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_USUARIO=user[USUARIO_ID])[0]
+            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_PROFESOR=user[USUARIO_ID])[0]
 
             if not grupo:
                 print(f"❌ grupo no encontrada o no pertenece al usuario")
@@ -152,7 +152,7 @@ def register_handlers(bot):
                 return
 
             # Obtener datos de la grupo
-            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_USUARIO=user[USUARIO_ID])[0]
+            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_PROFESOR=user[USUARIO_ID])[0]
 
             if not grupo:
                 print(f"❌ grupo no encontrada o no pertenece al usuario")
@@ -219,7 +219,7 @@ def register_handlers(bot):
                 return
 
             # Obtener datos de la grupo
-            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_USUARIO=user[USUARIO_ID])[0]
+            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_PROFESOR=user[USUARIO_ID])[0]
 
             if not grupo:
                 print(f"❌ grupo no encontrada o no pertenece al usuario")
@@ -285,32 +285,23 @@ def register_handlers(bot):
         
         user_info = ""
 
-        grupos = get_grupos_tutoria(GRUPO_ID_USUARIO=get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_ID])
-        print(grupos)
-        grupos.sort(key=lambda x: x[GRUPO_FECHA], reverse=True)
+        grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_ID])
 
         if grupos and len(grupos) > 0:
+            grupos.sort(key=lambda x: x[GRUPO_FECHA], reverse=True)
             user_info += "\n*🔵 grupos de tutoría creadas:*\n"
 
             # Diccionario para traducir los propósitos a texto más amigable
-            propositos = {
-                GRUPO_PROPOSITO_INDIVIDUAL: 'Tutorías individuales',
-                GRUPO_PROPOSITO_GRUPAL: 'Tutorías grupales',
-                GRUPO_PROPOSITO_AVISOS: 'Canal de avisos'
-            }
 
             for grupo in grupos:
                 # Obtener propósito en formato legible
-                proposito = propositos.get(grupo[GRUPO_PROPOSITO], grupo[GRUPO_PROPOSITO] or 'General')
-
                 # Obtener asignatura o indicar que es general
                 asignatura = grupo[GRUPO_ASIGNATURA] or 'General'
 
                 # Formato de fecha más amigable
-                fecha = grupo[GRUPO_FECHA].split(' ')[0] if grupo[GRUPO_FECHA] else 'Desconocida'
+                fecha = str(grupo[GRUPO_FECHA]).split(' ')[0] if grupo[GRUPO_FECHA] else 'Desconocida'
 
                 user_info += f"• *{grupo[GRUPO_NOMBRE]}*\n"
-                user_info += f"  📋 Propósito: {proposito}\n"
                 user_info += f"  📚 Asignatura: {asignatura}\n"
                 user_info += f"  📅 Creada: {fecha}\n\n"
         else:

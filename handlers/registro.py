@@ -10,6 +10,7 @@ from email.message import EmailMessage
 import smtplib
 from pathlib import Path
 
+from config import SMTP_EMAIL, SMTP_PASSWORD, SMTP_SERVER
 from db.constantes import USUARIO_TIPO, USUARIO_TIPO_ESTUDIANTE
 from handlers.grupos import COMMAND_CREAR_GRUPO_TUTORIA
 from handlers.horarios import COMMAND_CONFIGURAR_HORARIO
@@ -71,9 +72,9 @@ def register_handlers(bot):
     def send_verification_email(email, token):
         """Envía un correo electrónico con el token de verificación"""
         # Cargar credenciales sin valores predeterminados para datos sensibles
-        smtp_server = os.getenv("SMTP_SERVER")
-        sender_email = os.getenv("SMTP_EMAIL")
-        password = os.getenv("SMTP_PASSWORD")
+        smtp_server = SMTP_SERVER
+        sender_email = SMTP_EMAIL
+        password = SMTP_PASSWORD
         
         # Verificar todas las credenciales necesarias
         if not all([smtp_server, sender_email, password]):
@@ -143,8 +144,12 @@ def register_handlers(bot):
 
         setup_commands(chat_id)
 
+        user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)
+
+        print(user)
+
         # Verifica si el usuario ya está registrado
-        if get_usuarios(USUARIO_ID_TELEGRAM=chat_id) != []:
+        if user and user != []:
             bot.send_message(chat_id, "Ya estás registrado. Puedes usar las funcionalidades disponibles.")
             clear_state(chat_id)
             return
@@ -199,8 +204,10 @@ def register_handlers(bot):
             )
             return
         
+        user = get_usuarios(USUARIO_EMAIL=email)
+        
         # 2. Verificar si el correo existe en la tabla Usuarios
-        if get_usuarios(USUARIO_EMAIL=email)[0] is None:
+        if user is None:
             bot.send_message(
                 chat_id, 
                 "❌ *Correo no encontrado*\n\n"
@@ -211,7 +218,7 @@ def register_handlers(bot):
             return
 
         # 3. Verificar si el correo ya está registrado con un Telegram ID
-        if get_usuarios(USUARIO_EMAIL=email)[0][USUARIO_REGISTRADO] == USUARIO_SI_REGISTRADO:
+        if user[0][USUARIO_ID_TELEGRAM] is not None:
             bot.send_message(
                 chat_id, 
                 "⚠️ Este correo ya está registrado. Si ya tienes cuenta, usa los comandos disponibles.\n"
@@ -324,7 +331,7 @@ def register_handlers(bot):
                 if email:
                     # Actualizar la base de datos: cambiar Registrado a SI y guardar el TelegramID
                     user = get_usuarios(USUARIO_EMAIL=email)[0]  # Verificar que el email existe
-                    update_usuario(user[USUARIO_ID], USUARIO_REGISTRADO=USUARIO_SI_REGISTRADO, USUARIO_ID_TELEGRAM=message.from_user.id)
+                    update_usuario(user[USUARIO_ID], USUARIO_ID_TELEGRAM=message.from_user.id)
                     logger.info(f"Usuario {email} verificado correctamente. TelegramID actualizado.")
 
                     setup_commands(chat_id)

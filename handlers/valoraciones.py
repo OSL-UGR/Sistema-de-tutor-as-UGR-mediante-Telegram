@@ -85,7 +85,7 @@ def register_handlers(bot):
         
         for prof in profesores:
             markup.add(types.InlineKeyboardButton(
-                text=prof[USUARIO_NOMBRE],
+                text=f"{prof[USUARIO_NOMBRE]} {prof[USUARIO_APELLIDOS]}",
                 callback_data=f"{VALORAR}{prof[USUARIO_ID]}"
             ))
         
@@ -101,7 +101,7 @@ def register_handlers(bot):
     def handle_valorar(call):
         chat_id = call.message.chat.id
         profesor_id = int(call.data.split("_")[1])
-        user_id = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][GRUPO_ID_USUARIO]
+        user_id = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_ID]
         
         profesor = get_usuarios(USUARIO_ID=profesor_id)[0]
         valoracion_actual = get_valoraciones(VALORACION_ID_EVALUADOR=user_id, VALORACION_ID_PROFESOR=profesor_id)
@@ -265,7 +265,7 @@ def register_handlers(bot):
             comentario = user_data[chat_id].get(COMENTARIO, "")
             fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            insert_valoracion(evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, user_data[chat_id].get(GRUPO_ID))
+            insert_valoracion(evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo)
             
             bot.edit_message_text(
                 chat_id=chat_id,
@@ -312,10 +312,10 @@ def register_handlers(bot):
 
         for val in valoraciones:
             total += val[VALORACION_PUNTUACION]
-            if (val[VALORACION_ES_ANONIMA] == VALORACION_SI_ANONIMA):
+            if (val[VALORACION_ANONIMA] == VALORACION_SI_ANONIMA):
                 total_anon += val[VALORACION_PUNTUACION]
                 n_anon += 1
-            elif (val[VALORACION_ES_ANONIMA] == VALORACION_NO_ANONIMA):
+            elif (val[VALORACION_ANONIMA] == VALORACION_NO_ANONIMA):
                 total_public += val[VALORACION_PUNTUACION]
                 n_public += 1
 
@@ -381,9 +381,9 @@ def register_handlers(bot):
                     hay_comentadas = True
                     alumno = get_usuarios(USUARIO_ID=val[VALORACION_ID_EVALUADOR])[0]
 
-                    if val[VALORACION_ES_ANONIMA] == VALORACION_SI_ANONIMA:
+                    if val[VALORACION_ANONIMA] == VALORACION_SI_ANONIMA:
                         texto+= "• Anonimo: "
-                    elif val[VALORACION_ES_ANONIMA] == VALORACION_NO_ANONIMA:
+                    elif val[VALORACION_ANONIMA] == VALORACION_NO_ANONIMA:
                         texto+= f"• {alumno[USUARIO_NOMBRE]} {alumno[USUARIO_APELLIDOS]}: "
                     
                     texto += (f"{val[VALORACION_PUNTUACION]}⭐\n"
@@ -415,7 +415,7 @@ def register_handlers(bot):
     def handle_ver_no_anonimas(call):
         chat_id = call.message.chat.id
         user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0]
-        valoraciones = get_valoraciones(VALORACION_ID_PROFESOR=user[USUARIO_ID], VALORACION_ES_ANONIMA=VALORACION_NO_ANONIMA)
+        valoraciones = get_valoraciones(VALORACION_ID_PROFESOR=user[USUARIO_ID], VALORACION_ANONIMA=VALORACION_NO_ANONIMA)
 
         texto = "💯 Valoraciones publicas (1-5⭐)\n\n"
 

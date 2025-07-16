@@ -60,8 +60,8 @@ def register_handlers(bot):
             print("Primeras 5 grupos en la BD:")
             for grupo in grupos[:5]:
                 print(f"  - ID: {grupo[GRUPO_ID]}, Nombre: {grupo[GRUPO_NOMBRE]}")
-                print(f"    Profesor: {grupo[GRUPO_ID_USUARIO]}, Asignatura: {grupo[GRUPO_ID_ASIGNATURA]} ({grupo[GRUPO_ASIGNATURA]})")
-                print(f"    Tipo: {grupo[GRUPO_TIPO]}, Propósito: {grupo[GRUPO_PROPOSITO]}")
+                print(f"    Profesor: {grupo[GRUPO_ID_PROFESOR]}, Asignatura: {grupo[GRUPO_ID_ASIGNATURA]} ({grupo[GRUPO_ASIGNATURA]})")
+                print(f"    Tipo: {grupo[GRUPO_TIPO]}")
                 print("    ---")
         
         if not user:
@@ -123,7 +123,6 @@ def register_handlers(bot):
                     profesores[profesor_id][MATRICULAS][asig[MATRICULA_ID_ASIGNATURA]] = {
                         ASIGNATURA_ID: asig[MATRICULA_ID_ASIGNATURA],
                         ASIGNATURA_NOMBRE: asig[MATRICULA_ASIGNATURA],
-                        ASIGNATURA_CODIGO: asig[MATRICULA_CODIGO],
                         GRUPOS: []
 
                     }
@@ -138,7 +137,7 @@ def register_handlers(bot):
         
         # Obtener todas las grupos de cada profesor
         for profesor_id in profesores:
-            grupos = get_grupos_tutoria(GRUPO_ID_USUARIO=profesor_id)
+            grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=profesor_id)
             print(f"Encontradas {len(grupos)} grupos para el profesor {profesor_id}")
             
             # Clasificar las grupos por asignatura
@@ -146,7 +145,6 @@ def register_handlers(bot):
                 grupo_data = {                                 
                     GRUPO_ID: grupo[GRUPO_ID],
                     GRUPO_NOMBRE: grupo[GRUPO_NOMBRE],
-                    GRUPO_PROPOSITO: grupo[GRUPO_PROPOSITO],
                     GRUPO_TIPO: grupo[GRUPO_TIPO],
                     GRUPO_ENLACE: grupo[GRUPO_ENLACE],
                     GRUPO_ID_CHAT: grupo[GRUPO_ID_CHAT],
@@ -219,13 +217,9 @@ def register_handlers(bot):
             for asignatura_id, asignatura in prof_info[MATRICULAS].items():
                 if asignatura_id != GENERAL:  # Solo las asignaturas regulares, no la categoría "general"
                     nombre = asignatura[ASIGNATURA_NOMBRE]
-                    codigo = asignatura.get(ASIGNATURA_CODIGO, '') or ''
                     
                     # Mostrar información de la asignatura
                     mensaje += f"• {nombre}"
-                    if codigo:
-                        mensaje += f" ({codigo})"
-                    mensaje += "\n"
                     
                     # Filtrar grupos para esta asignatura específica
                     grupos_asignatura = [s for s in asignatura.get(GRUPOS, []) if s[GRUPO_TIPO].lower() != GRUPO_PRIVADO]
@@ -236,11 +230,11 @@ def register_handlers(bot):
                     # Mostrar grupos de esta asignatura
                     if grupos_asignatura:
                         for grupo in grupos_asignatura:
-                            proposito = grupo.get(GRUPO_PROPOSITO, '').lower() if grupo.get(GRUPO_PROPOSITO) else GENERAL
+                            tipo = grupo.get(GRUPO_TIPO, '')
                             nombre_grupo = grupo.get(GRUPO_NOMBRE, 'grupo sin nombre')
                             
                             # Seleccionar emoji según el propósito
-                            emoji = "📢" if proposito == GRUPO_PROPOSITO_AVISOS else "👥" if proposito == GRUPO_PROPOSITO_GRUPAL else "🔵"
+                            emoji = "📢" if tipo == GRUPO_PUBLICO else "👥" if tipo == GRUPO_PRIVADO else "🔵"
                             
                             # Mostrar como hipervínculo si tiene enlace
                             if grupo.get(GRUPO_ENLACE):
@@ -263,11 +257,11 @@ def register_handlers(bot):
             if grupos_generales_no_privados:
                 mensaje += "🌐 *grupos Generales:*\n"
                 for grupo in grupos_generales_no_privados:
-                    proposito = grupo.get(GRUPO_PROPOSITO, '').lower() if grupo.get(GRUPO_PROPOSITO) else GENERAL
+                    tipo = grupo.get(GRUPO_TIPO, '')
                     nombre_grupo = grupo.get(GRUPO_NOMBRE, 'grupo sin nombre')
                     
                     # Seleccionar emoji según el propósito
-                    emoji = "📢" if proposito == GRUPO_PROPOSITO_AVISOS else "👥" if proposito == GRUPO_PROPOSITO_GRUPAL else "🔵"
+                    emoji = "📢" if tipo == GRUPO_PUBLICO else "👥" if tipo == GRUPO_PRIVADO else "🔵"
                     
                     # Mostrar como hipervínculo si tiene enlace
                     if grupo.get(GRUPO_ENLACE):
@@ -491,7 +485,7 @@ def register_handlers(bot):
             
             # 2. Obtener información de la grupo y del estudiante       
             # Verificar que la grupo pertenece al profesor
-            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_USUARIO=profesor[USUARIO_ID])[0]
+            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_PROFESOR=profesor[USUARIO_ID])[0]
             
             if not grupo:
                 bot.answer_callback_query(call.id, "❌ No tienes permisos para esta grupo o no existe.")

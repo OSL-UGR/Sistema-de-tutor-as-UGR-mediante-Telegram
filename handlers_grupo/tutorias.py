@@ -64,8 +64,8 @@ def register_handlers(bot):
                         f"👋 El profesor ha finalizado la sesión de tutoría con {nombre}."
                     )
 
-                    # Expulsar al estudiante (ban temporal de 30 segundos)
-                    until_date = int(time.time()) + 30
+                    # Expulsar al estudiante (ban temporal de 5 segundos)
+                    until_date = int(time.time()) + 5
                     bot.ban_chat_member(chat_id, estudiante_id, until_date=until_date)
                     clear_state(chat_id)
 
@@ -109,8 +109,8 @@ def register_handlers(bot):
                         f"👋 {nombre} ha finalizado su sesión de tutoría."
                     )
 
-                    # Expulsar al usuario (ban temporal de 30 segundos)
-                    until_date = int(time.time()) + 30
+                    # Expulsar al usuario (ban temporal de 5 segundos)
+                    until_date = int(time.time()) + 5
                     bot.ban_chat_member(chat_id, user_id, until_date=until_date)
                     clear_state(chat_id)
 
