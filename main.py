@@ -2,9 +2,9 @@ import telebot
 import time
 from telebot import types
 import sys
-from config import BOT_TOKEN, DB_PATH,EXCEL_PATH
+from config import BOT_TOKEN
 from db.db import close_connection
-from db.queries import get_grupos_tutoria, get_matriculas, get_usuarios, insert_asignatura
+from db.queries import get_grupos_tutoria, get_matriculas, get_usuarios
 from db.constantes import *
 
 COMMAND_HELP = "help"
@@ -62,7 +62,6 @@ def handle_help(message):
 def handle_ver_misdatos(message):
     chat_id = message.chat.id
     print(f"\n\n### INICIO VER_MISDATOS - Usuario: {message.from_user.id} ###")
-    print(message.from_user.id)
     
     user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)
     
@@ -86,13 +85,7 @@ def handle_ver_misdatos(message):
         f"*Correo:* {user[USUARIO_EMAIL] or 'No registrado'}\n"
         f"*Tipo:* {user[USUARIO_TIPO].capitalize()}\n"
     )
-    
-    # Añadir la carrera desde la tabla Usuarios
-    if 'Carrera' in user_dict and user_dict[USUARIO_CARRERA]:
-        user_info += f"*Carrera:* {user_dict[USUARIO_CARRERA]}\n\n"
-    else:
-        user_info += "*Carrera:* No registrada\n\n"
-    
+        
     # Añadir información de matrículas
     if matriculas and len(matriculas) > 0:
         user_info += "*Asignaturas matriculadas:*\n"
@@ -109,36 +102,37 @@ def handle_ver_misdatos(message):
     # Añadir horario si es profesor
     if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
         if USUARIO_HORARIO in user_dict and user_dict[USUARIO_HORARIO]:
-            user_info += f"\n*Horario de tutorías:*\n{user_dict[USUARIO_HORARIO]}\n\n"
-        
+            user_info += f"\n*Horario de tutorías:*"
+            
+            dias = user_dict[USUARIO_HORARIO].split(', ')
+            
+            dia_anterior = ""
+            for dia in dias:
+                dia = dia.split(' ')
+                if dia[0] != dia_anterior:
+                    user_info += f"\n  -{dia[0]} {dia[1]}"
+                else:
+                    user_info += f", {dia[1]}"
+                dia_anterior = dia[0]
+            
+            user_info += "\n"
         # NUEVA SECCIÓN: Mostrar grupos creadas por el profesor        
         # Consultar todas las grupos creadas por este profesor  
-        grupos = get_grupos_tutoria(GRUPO_ID_USUARIO=user[USUARIO_ID])
-        print(grupos)
-        grupos.sort(key=lambda x: x[GRUPO_FECHA], reverse=True)
+        grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=user[USUARIO_ID])
         
         if grupos and len(grupos) > 0:
+            print(grupos)
+            grupos.sort(key=lambda x: x[GRUPO_FECHA], reverse=True)
             user_info += "\n*🔵 grupos de tutoría creadas:*\n"
             
-            # Diccionario para traducir los propósitos a texto más amigable
-            propositos = {
-                'individual': 'Tutorías individuales',
-                'grupal': 'Tutorías grupales',
-                'avisos': 'Canal de avisos'
-            }
-            
             for grupo in grupos:
-                # Obtener propósito en formato legible
-                proposito = propositos.get(grupo[GRUPO_PROPOSITO], grupo[GRUPO_PROPOSITO] or 'General')
-                
                 # Obtener asignatura o indicar que es general
                 asignatura = grupo[GRUPO_ASIGNATURA] or 'General'
                 
                 # Formato de fecha más amigable
-                fecha = grupo[GRUPO_FECHA].split(' ')[0] if grupo[GRUPO_FECHA] else 'Desconocida'
+                fecha = str(grupo[GRUPO_FECHA]).split(' ')[0] if grupo[GRUPO_FECHA] else 'Desconocida'
                 
                 user_info += f"• *{grupo[GRUPO_NOMBRE]}*\n"
-                user_info += f"  📋 Propósito: {proposito}\n"
                 user_info += f"  📚 Asignatura: {asignatura}\n"
                 user_info += f"  📅 Creada: {fecha}\n\n"
         else:
@@ -218,8 +212,6 @@ if __name__ == "__main__":
     print("🎓 SISTEMA DE TUTORÍAS UGR")
     print("="*50)
     print(f"📅 Fecha de inicio: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"💾 Base de datos: {DB_PATH}")
-    print(f"📊 Excel de datos: {EXCEL_PATH}")
     print("="*50)
     
     # Iniciar el bot

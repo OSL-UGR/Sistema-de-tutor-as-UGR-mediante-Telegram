@@ -70,7 +70,7 @@ def register_handlers(bot):
         # Obtener SOLO asignaturas sin grupo de avisos asociada
 
         asignaturas_profesor = get_matriculas(MATRICULA_ID_USUARIO=profesor_id, MATRICULA_TIPO=MATRICULA_PROFESOR)
-        grupos = get_grupos_tutoria(GRUPO_ID_USUARIO=profesor_id, GRUPO_TIPO=GRUPO_PUBLICO)
+        grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=profesor_id, GRUPO_TIPO=GRUPO_PUBLICO)
         ids_grupos = [grupo[GRUPO_ID_ASIGNATURA] for grupo in grupos]
 
         asignaturas_disponibles = []
@@ -80,7 +80,7 @@ def register_handlers(bot):
                 asignaturas_disponibles.append(asignatura)
 
         # Verificar si ya tiene grupo de tutoría privada
-        tiene_privada = get_grupos_tutoria(GRUPO_ID_USUARIO=profesor_id, GRUPO_TIPO=GRUPO_PRIVADO) != []
+        tiene_privada = get_grupos_tutoria(GRUPO_ID_PROFESOR=profesor_id, GRUPO_TIPO=GRUPO_PRIVADO) != []
 
 
         # Verificar si hay asignaturas disponibles
@@ -189,7 +189,7 @@ def register_handlers(bot):
                 nuevo_nombre,
                 tipo_grupo,  # Ahora con el valor correcto "pública"
                 id_asignatura,
-                str(chat_id),
+                chat_id,
                 enlace_invitacion
             )
 
@@ -269,8 +269,8 @@ def register_handlers(bot):
                 id_usuario_profesor,
                 nuevo_nombre,
                 tipo_grupo,
-                "0",  # 0 indica que no está vinculado a una asignatura específica
-                str(chat_id),
+                None,  # 0 indica que no está vinculado a una asignatura específica
+                chat_id,
                 enlace_invitacion
             )
 

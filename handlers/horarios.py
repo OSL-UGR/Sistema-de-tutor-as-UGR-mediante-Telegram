@@ -33,7 +33,7 @@ VOLVER_DIAS = "volver_dias"
 ADD_FRANJA = "add_franja_"
 DEL_FRANJA = "del_franja_"
 VOLVER_GESTION = "volver_gestion_"
-ELIMINAR_FRANJA = "eliminar_franja"
+ELIMINAR_FRANJA = "eliminar_franja_"
 GUARDAR_HORARIO = "guardar_horario"
 CANCELAR_HORARIO = "cancelar_horario"
 
@@ -377,11 +377,13 @@ def register_handlers(bot):
     def handle_eliminar_franja(call):
         """Elimina una franja horaria específica"""
         chat_id = call.message.chat.id
-        _, dia, hora = call.data.split("_", 2)
+        a1, a2, dia, hora = call.data.split("_", 3)
         
         try:
             # Eliminar la franja seleccionada
+            print(user_data[chat_id][USUARIO_HORARIO][dia])
             user_data[chat_id][USUARIO_HORARIO][dia].remove(hora)
+            print(user_data[chat_id][USUARIO_HORARIO][dia])
             
             # Eliminar el día si no quedan franjas
             if not user_data[chat_id][USUARIO_HORARIO][dia]:
@@ -428,7 +430,7 @@ def register_handlers(bot):
             bot.answer_callback_query(call.id, text="✅ Horario guardado correctamente")
             clear_state(chat_id)  # Limpiar estado para finalizar
         else:
-            bot.answer_callback_query(call.id, text="❌ Error al guardar el horario")
+            bot.answer_callback_query(call.id, text="❌ Error al guardar el horario o no has modificado")
     
     @bot.callback_query_handler(func=lambda call: call.data == CANCELAR_HORARIO)
     def handle_cancelar_horario(call):
