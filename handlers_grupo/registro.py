@@ -250,7 +250,7 @@ def register_handlers(bot):
 
             # Crear enlace de invitación si es posible
             try:
-                enlace_invitacion = bot.create_chat_invite_link(chat_id).invite_link
+                enlace_invitacion = bot.create_chat_invite_link(chat_id, member_limit=1).invite_link
             except:
                 enlace_invitacion = None
 

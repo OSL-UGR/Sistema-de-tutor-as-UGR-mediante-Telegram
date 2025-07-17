@@ -82,6 +82,7 @@ GRUPO_ENLACE = "Enlace_invitacion"
 GRUPO_PROFESOR = "Profesor"
 GRUPO_ASIGNATURA = "Asignatura"
 GRUPO_FECHA = "Fecha_creacion"
+GRUPO_EN_USO = "En_uso"
 
 # Conjunto de campos válidos para validación
 GRUPO_CAMPOS_VALIDOS = {
@@ -92,6 +93,7 @@ GRUPO_CAMPOS_VALIDOS = {
     "GRUPO_ID_ASIGNATURA",
     "GRUPO_ID_CHAT",
     "GRUPO_ENLACE",
+    "GRUPO_EN_USO",
 }
 
 GRUPO_FIELDS = {           
@@ -102,6 +104,7 @@ GRUPO_FIELDS = {
     "GRUPO_ID_ASIGNATURA":GRUPO_ID_ASIGNATURA,
     "GRUPO_ID_CHAT":GRUPO_ID_CHAT,
     "GRUPO_ENLACE":GRUPO_ENLACE,
+    "GRUPO_EN_USO":GRUPO_EN_USO
 }
 
 # Posibles valores campos

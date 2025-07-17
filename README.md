@@ -32,7 +32,7 @@
 ### Iniciar bot de registro
 
 ```bash
-python main.py
+python main
 ```
 
 Envía `/start` en Telegram para comenzar el alta.
@@ -40,7 +40,7 @@ Envía `/start` en Telegram para comenzar el alta.
 ### Iniciar bot de grupos
 
 ```bash
-python bot_grupo_main.py
+python main_grupo
 ```
 
 Agregar el bot como admin en un grupo para habilitar la configuración.
@@ -52,53 +52,6 @@ Agregar el bot como admin en un grupo para habilitar la configuración.
 * `/configurar_horario`
 * `/crear_grupo_tutoria`
 * `/ver_misdatos`
-
----
-
-## Estructura del Repositorio
-
-```
-├── main.py
-├── bot_grupo_main.py
-├── handlers/       # Lógica de negocio
-├── db/             # Consultas SQL
-├── utils/          # Módulos auxiliares
-├── data/           # Excel y DB inicial
-├── docs/           # Imágenes y diagramas
-└── datos.env.txt.example
-```
-
----
-
-## Resumen del TFG
-
-**Título**: Diseño, desarrollo y despliegue de una arquitectura en tres capas para la gestión de citas, grupos y horarios
-
-**Autor**: Alberto Velasco Fuentes
-
-**Director**: Gabriel Maciá Fernández
-
-**Contexto**: La gestión tradicional de tutorías mediante correo electrónico genera demoras y confusiones; el proyecto propone mejorar la experiencia mediante bots de Telegram.
-
-**Objetivos**:
-
-* Automatizar el alta de usuarios.
-* Facilitar la reserva y gestión de tutorías.
-* Proporcionar métricas de uso.
-
-**Metodología**: Desarrollo en Python con la librería `python-telegram-bot`, diseño en tres capas y pruebas funcionales.
-
-**Resultados**: Reducción del tiempo de reserva a segundos, mejora en la puntualidad y sistema escalable.
-
-**Conclusiones**: El prototipo demuestra viabilidad y beneficios claros; se recomienda integración de videoconferencia y mejoras UX.
-
----
-
-## Roadmap / Futuras mejoras
-
-* Integración de videollamadas.
-* Frontend web de administración.
-* Sistema de notificaciones via email.
 
 ---
 

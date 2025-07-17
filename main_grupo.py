@@ -7,11 +7,11 @@ import threading
 import os
 import sys
 import logging
-from dotenv import load_dotenv
 from telebot import types
 
 
 # Importar utilidades y handlers
+from config import BOT_TOKEN_GRUPO
 from handlers_grupo.registro import COMMAND_CONFIGURAR_GRUPO
 from handlers_grupo.tutorias import COMMAND_FINALIZAR
 from handlers_grupo.utils import (
@@ -22,23 +22,12 @@ from handlers_grupo.utils import (
 # Configuración de logging
 logger = configurar_logger()
 
-# Cargar token del bot de grupos
-base_dir = os.path.dirname(os.path.abspath(__file__))
-env_path = os.path.join(base_dir, "datos.env")
-
-if os.path.exists(env_path):
-    load_dotenv(dotenv_path=env_path)
-    logger.info(f"Cargando variables desde {env_path}")
-else:
-    load_dotenv()
-    logger.warning("No se encontró archivo de variables específico")
-
 # Estandarizar el nombre del token
-BOT_TOKEN = os.getenv("BOT_TOKEN_GRUPO")
+BOT_TOKEN = BOT_TOKEN_GRUPO
     
 if not BOT_TOKEN:
     logger.critical("Token del bot de grupos no encontrado")
-    print("El token del bot de grupos no está configurado. Añade BOT_TOKEN_GRUPO en datos.env.txt")
+    print("El token del bot de grupos no está configurado. Añade BOT_TOKEN_GRUPO en datos.env")
     sys.exit(1)
 
 from telebot import apihelper
