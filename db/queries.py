@@ -2,17 +2,11 @@ from pathlib import Path
 import sys
 import os
 import logging
+from db import get_cursor, commit, rollback
 from db.constantes import *
-from db.db import get_cursor, commit, rollback
 
 # Configurar logger
 logger = logging.getLogger(__name__)
-
-# Añadir directorio padre al path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Ruta a la base de datos
-DB_PATH = Path(__file__).parent.parent / "tutoria_ugr.db"
 
 ##=====================
 ## ===== Usuarios =====
@@ -209,7 +203,9 @@ def update_grupo_tutoria(grupo_id, do_commit=True, **kwargs):
         query = f"UPDATE {GRUPOS} SET "
         query += ", ".join([f"{GRUPO_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
         query += f" WHERE {GRUPO_ID} = {PLACEHOLDER}"
-
+        
+        print(query)
+        
         cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()) + [grupo_id])
         if do_commit:

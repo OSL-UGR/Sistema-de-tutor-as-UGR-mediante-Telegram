@@ -3,7 +3,7 @@ import time
 from telebot import types
 import sys
 from config import BOT_TOKEN
-from db.db import close_connection
+from db import close_connection
 from db.queries import get_grupos_tutoria, get_matriculas, get_usuarios
 from db.constantes import *
 

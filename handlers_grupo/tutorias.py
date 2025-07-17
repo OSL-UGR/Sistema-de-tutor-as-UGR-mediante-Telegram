@@ -1,5 +1,5 @@
-from db.constantes import USUARIO_TIPO, USUARIO_TIPO_PROFESOR
-from db.queries import get_grupos_tutoria, get_usuarios
+from db.constantes import GRUPO_ID, USUARIO_TIPO, USUARIO_TIPO_PROFESOR
+from db.queries import get_grupos_tutoria, get_usuarios, update_grupo_tutoria
 
 from telebot import types
 import time
@@ -58,16 +58,18 @@ def register_handlers(bot):
                     if estudiante_info.user.last_name:
                         nombre += f" {estudiante_info.user.last_name}"
 
-                    # Informar al grupo
-                    enviado = bot.send_message(
-                        chat_id,
-                        f"👋 El profesor ha finalizado la sesión de tutoría con {nombre}."
+                    mensaje = bot.send_message(
+                            chat_id,
+                            "✅ Fin de tutoria. ¡Gracias por participar!\n\n"
+                            "Has sido expulsado de la sala pero puedes ver aqui tu historial de chat."
                     )
 
-                    # Expulsar al estudiante (ban temporal de 5 segundos)
-                    until_date = int(time.time()) + 5
+                    # Expulsar al estudiante (ban temporal de 30 segundos)
+                    until_date = int(time.time()) + 30
                     bot.ban_chat_member(chat_id, estudiante_id, until_date=until_date)
                     clear_state(chat_id)
+
+                    bot.delete_message(chat_id, mensaje.id)
 
                     # Enviar mensaje privado al estudiante
                     try:
@@ -78,19 +80,11 @@ def register_handlers(bot):
                     except Exception as dm_error:
                         print(f"No se pudo enviar mensaje privado al estudiante: {dm_error}")
 
-                    # Confirmar al profesor
-                    bot.edit_message_text(
-                        f"✅ Has finalizado la sesión de tutoría con {nombre}.",
-                        chat_id=chat_id,
-                        message_id=enviado.id
-                    )
-
                 except Exception as e:
                     print(f"❌ Error al expulsar estudiante: {e}")
-                    bot.edit_message_text(
+                    bot.send_message(
+                        chat_id,
                         "No pude finalizar la sesión del estudiante. Asegúrate de que tengo permisos de administrador.",
-                        chat_id=chat_id,
-                        message_id=enviado.id
                     )
 
             else:
@@ -103,16 +97,18 @@ def register_handlers(bot):
                     if message.from_user.last_name:
                         nombre += f" {message.from_user.last_name}"
 
-                    # Informar en el grupo antes de expulsar
-                    bot.send_message(
-                        chat_id,
-                        f"👋 {nombre} ha finalizado su sesión de tutoría."
+                    mensaje = bot.send_message(
+                            chat_id,
+                            "✅ Fin de tutoria. ¡Gracias por participar!\n\n"
+                            "Has sido expulsado de la sala pero puedes ver aqui tu historial de chat."
                     )
 
-                    # Expulsar al usuario (ban temporal de 5 segundos)
-                    until_date = int(time.time()) + 5
+                    # Expulsar al usuario (ban temporal de 30 segundos)
+                    until_date = int(time.time()) + 30
                     bot.ban_chat_member(chat_id, user_id, until_date=until_date)
                     clear_state(chat_id)
+
+                    bot.delete_message(chat_id, mensaje.id)
 
                     # Enviar mensaje privado al estudiante
                     try:
@@ -130,6 +126,7 @@ def register_handlers(bot):
                         "No pude procesar tu solicitud. Asegúrate de que el bot sea administrador con permisos suficientes."
                     )
 
+            update_grupo_tutoria(grupo[GRUPO_ID], GRUPO_EN_USO=False)
         except Exception as e:
             print(f"❌❌❌ ERROR EN HANDLER TERMINAR TUTORÍA: {e}")
             bot.send_message(chat_id, "Ocurrió un error al procesar tu solicitud.")

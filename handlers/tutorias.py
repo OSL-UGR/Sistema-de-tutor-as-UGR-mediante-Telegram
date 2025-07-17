@@ -138,34 +138,35 @@ def register_handlers(bot):
         # Obtener todas las grupos de cada profesor
         for profesor_id in profesores:
             grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=profesor_id)
-            print(f"Encontradas {len(grupos)} grupos para el profesor {profesor_id}")
+            if grupos:
+                print(f"Encontradas {len(grupos)} grupos para el profesor {profesor_id}")
             
-            # Clasificar las grupos por asignatura
-            for grupo in grupos:
-                grupo_data = {                                 
-                    GRUPO_ID: grupo[GRUPO_ID],
-                    GRUPO_NOMBRE: grupo[GRUPO_NOMBRE],
-                    GRUPO_TIPO: grupo[GRUPO_TIPO],
-                    GRUPO_ENLACE: grupo[GRUPO_ENLACE],
-                    GRUPO_ID_CHAT: grupo[GRUPO_ID_CHAT],
-                    GRUPO_ASIGNATURA: grupo[GRUPO_ASIGNATURA],
-                }
-                
-                # Asignar la grupo a su asignatura correspondiente (o a general si no tiene)
-                if grupo[GRUPO_ID_ASIGNATURA] is not None:
-                    asignatura_id = grupo[GRUPO_ID_ASIGNATURA]
-                    # Verificar que la asignatura existe en el diccionario del profesor
-                    if asignatura_id in profesores[profesor_id][MATRICULAS]:
-                        profesores[profesor_id][MATRICULAS][asignatura_id][GRUPOS].append(grupo_data)
-                        print(f"Asignada grupo '{grupo[GRUPO_NOMBRE]}' a asignatura ID {asignatura_id}")
+                # Clasificar las grupos por asignatura
+                for grupo in grupos:
+                    grupo_data = {                                 
+                        GRUPO_ID: grupo[GRUPO_ID],
+                        GRUPO_NOMBRE: grupo[GRUPO_NOMBRE],
+                        GRUPO_TIPO: grupo[GRUPO_TIPO],
+                        GRUPO_ENLACE: grupo[GRUPO_ENLACE],
+                        GRUPO_ID_CHAT: grupo[GRUPO_ID_CHAT],
+                        GRUPO_ASIGNATURA: grupo[GRUPO_ASIGNATURA],
+                    }
+
+                    # Asignar la grupo a su asignatura correspondiente (o a general si no tiene)
+                    if grupo[GRUPO_ID_ASIGNATURA] is not None:
+                        asignatura_id = grupo[GRUPO_ID_ASIGNATURA]
+                        # Verificar que la asignatura existe en el diccionario del profesor
+                        if asignatura_id in profesores[profesor_id][MATRICULAS]:
+                            profesores[profesor_id][MATRICULAS][asignatura_id][GRUPOS].append(grupo_data)
+                            print(f"Asignada grupo '{grupo[GRUPO_NOMBRE]}' a asignatura ID {asignatura_id}")
+                        else:
+                            # Si por alguna razón la asignatura no está en el diccionario, asignar a general
+                            profesores[profesor_id][MATRICULAS][GENERAL][GRUPOS].append(grupo_data)
+                            print(f"grupo '{grupo[GRUPO_NOMBRE]}' asignada a GENERAL (asignatura ID {asignatura_id} no encontrada)")
                     else:
-                        # Si por alguna razón la asignatura no está en el diccionario, asignar a general
+                        # Si la grupo no tiene asignatura, agregarla a la categoría "general"
                         profesores[profesor_id][MATRICULAS][GENERAL][GRUPOS].append(grupo_data)
-                        print(f"grupo '{grupo[GRUPO_NOMBRE]}' asignada a GENERAL (asignatura ID {asignatura_id} no encontrada)")
-                else:
-                    # Si la grupo no tiene asignatura, agregarla a la categoría "general"
-                    profesores[profesor_id][MATRICULAS][GENERAL][GRUPOS].append(grupo_data)
-                    print(f"grupo '{grupo[GRUPO_NOMBRE]}' asignada a GENERAL (sin asignatura asociada)")
+                        print(f"grupo '{grupo[GRUPO_NOMBRE]}' asignada a GENERAL (sin asignatura asociada)")
 
         
         # Si no se encontró ningún profesor, mostrar mensaje y terminar
@@ -337,12 +338,13 @@ def register_handlers(bot):
                 return
             
             # 2. Obtener información de la grupo y del profesor            
-            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id)[0]
+            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id)
             profesor = get_usuarios(USUARIO_ID=profesor_id)[0]
             
-            if not grupo:
+            if not grupo or grupo == []:
                 bot.answer_callback_query(call.id, "❌ No se encontró la grupo solicitada.")
                 return
+            grupo = grupo[0]
                 
             # 3. Verificar si estamos en horario de tutoría del profesor
             print(f"Verificando horario de tutoría para profesor_id={profesor_id}")
@@ -380,18 +382,39 @@ def register_handlers(bot):
                 )
                 return
             
-            # 4. Estamos en horario de tutoría, enviar notificación al profesor
-            # Obtener datos del estudiante para la notificación
             estudiante_nombre = f"{user[USUARIO_NOMBRE]} {user[USUARIO_APELLIDOS] or ''}".strip()
+
+            # 4. Comprobamos si esta ocupado, y avisamos si esta
+            if grupo[GRUPO_EN_USO] == True:
+                mensaje_profesor = (
+                    f"🔔 *Solicitud de tutoría privada*\n\n"
+                    f"👤 Estudiante: {estudiante_nombre}\n"
+                    f"📧 Email: {user[USUARIO_EMAIL] or 'No disponible'}\n"
+                    "⚠️⚠️ TU SALA DE TUTORIAS ESTA OCUPADA ⚠️⚠️\n"
+                    "TERMINA LA TUTORIA ACTUAL PARA ACEPTAR MAS"
+                )
+
+                print(mensaje_profesor)
+                bot.send_message(
+                    chat_id,
+                    "⚠️ El profesor esta ocupado, intentalo de nuevo en unos minutos\n"
+                    "Se ha notificado al profesor.",
+                )
+                bot.send_message(
+                    profesor[USUARIO_ID_TELEGRAM],
+                    mensaje_profesor,
+                )
+                return
             
+            # 5. Esta disponible, enviar notificación al profesor
             # Crear mensaje de notificación para el profesor
             mensaje_profesor = (
-                f"🔔 *Solicitud de tutoría privado*\n\n"
+                f"🔔 *Solicitud de tutoría privada*\n\n"
                 f"👤 Estudiante: {estudiante_nombre}\n"
                 f"📧 Email: {user[USUARIO_EMAIL] or 'No disponible'}\n"
             )
             
-            if grupo['Asignatura']:
+            if grupo[GRUPO_ASIGNATURA]:
                 mensaje_profesor += f"📚 Asignatura: {grupo[GRUPO_ASIGNATURA]}\n"
             
             mensaje_profesor += (
@@ -405,7 +428,7 @@ def register_handlers(bot):
                 types.InlineKeyboardButton("❌ Rechazar", callback_data=f"{RECHAZAR_TUTORIA}{grupo_id}_{user[USUARIO_ID]}")
             )
             
-            # 5. Generar mensaje de confirmación para el estudiante (sin enviar enlace todavía)
+            # 6. Generar mensaje de confirmación para el estudiante (sin enviar enlace todavía)
             if grupo[GRUPO_ENLACE]:
                 # Mensaje para el estudiante (solo confirmación de solicitud)
                 mensaje_estudiante = (
@@ -442,8 +465,7 @@ def register_handlers(bot):
                 # El profesor no tiene Telegram registrado
                 bot.send_message(
                     chat_id,
-                    "⚠️ El profesor no tiene cuenta de Telegram registrada. "
-                    "Se enviará tu solicitud por correo electrónico.",
+                    "⚠️ El profesor no tiene cuenta de Telegram registrada",
                     parse_mode="Markdown"
                 )
                 
@@ -505,7 +527,7 @@ def register_handlers(bot):
                     f"✅ *Tu solicitud de tutoría ha sido aprobada*\n\n"
                     f"El profesor {profesor[USUARIO_NOMBRE]} {profesor[USUARIO_APELLIDOS] or ''} "
                     f"ha aprobado tu solicitud de acceso a la grupo de tutorías.\n\n"
-                    f"Usa este enlace para unirte al grupo: {grupo[GRUPO_ENLACE]}"
+                    f"Usa este enlace para unirte al grupo: {grupo[GRUPO_ENLACE].replace("_","\_")}"
                 )
                 
                 bot.send_message(

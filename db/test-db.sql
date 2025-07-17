@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS Grupos_tutoria (
     Chat_id VARCHAR(100) UNIQUE,
     Enlace_invitacion TEXT,
     Fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    En_uso BOOLEAN DEFAULT 0,
     FOREIGN KEY (Asignatura_id) REFERENCES Asignaturas(Asignatura_id),
     FOREIGN KEY (Profesor_id) REFERENCES Usuarios(Usuario_id)
 );
