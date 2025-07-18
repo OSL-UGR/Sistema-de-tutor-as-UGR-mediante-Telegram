@@ -6,11 +6,8 @@ from config import BOT_TOKEN
 from db import close_connection
 from db.queries import get_grupos_tutoria, get_matriculas, get_usuarios
 from db.constantes import *
+from handlers.commands import *
 
-COMMAND_HELP = "help"
-COMMAND_VER_MIS_DATOS = "ver_misdatos"
-
-# Reemplaza todos los handlers universales por este ÚNICO handler al final
 # Inicializar el bot de Telegram
 bot = telebot.TeleBot(BOT_TOKEN) 
 
@@ -167,11 +164,11 @@ def handle_ver_misdatos(message):
         bot.send_message(chat_id, user_info.replace('*', ''), parse_mode=None)
 
 # Importar y configurar los handlers desde los módulos
-from handlers.registro import COMMAND_START, register_handlers as register_registro_handlers
-from handlers.tutorias import COMMAND_TUTORIA, register_handlers as register_tutorias_handlers
-from handlers.grupos import COMMAND_CREAR_GRUPO_TUTORIA, EDIT_GRUPO, register_handlers as register_grupos_handlers
-from handlers.horarios import COMMAND_CONFIGURAR_HORARIO, register_handlers as register_horarios_handlers
-from handlers.valoraciones import COMMAND_VALORAR_PROFESOR, COMMAND_VER_VALORACIONES, register_handlers as register_valoraciones_handlers
+from handlers.registro import register_handlers as register_registro_handlers
+from handlers.tutorias import register_handlers as register_tutorias_handlers
+from handlers.grupos import EDIT_GRUPO, register_handlers as register_grupos_handlers
+from handlers.horarios import register_handlers as register_horarios_handlers
+from handlers.valoraciones import register_handlers as register_valoraciones_handlers
 
 # Registrar todos los handlers
 register_registro_handlers(bot)

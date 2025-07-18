@@ -1,0 +1,9 @@
+COMMAND_START = "start"
+COMMAND_HELP = "help"
+COMMAND_VER_MIS_DATOS = "ver_misdatos"
+COMMAND_CREAR_GRUPO_TUTORIA = 'crear_grupo_tutoria'
+COMMAND_CONFIGURAR_HORARIO = "configurar_horario"
+COMMAND_VER_HORARIO = "ver_horario"
+COMMAND_TUTORIA ='tutoria'
+COMMAND_VALORAR_PROFESOR = 'valorar_profesor'
+COMMAND_VER_VALORACIONES = 'ver_valoraciones'
