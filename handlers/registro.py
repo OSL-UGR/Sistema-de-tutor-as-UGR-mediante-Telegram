@@ -12,10 +12,7 @@ from pathlib import Path
 
 from config import SMTP_EMAIL, SMTP_PASSWORD, SMTP_SERVER
 from db.constantes import USUARIO_TIPO, USUARIO_TIPO_ESTUDIANTE
-from handlers.grupos import COMMAND_CREAR_GRUPO_TUTORIA
-from handlers.horarios import COMMAND_CONFIGURAR_HORARIO
-from handlers.tutorias import COMMAND_TUTORIA
-from handlers.valoraciones import COMMAND_VALORAR_PROFESOR, COMMAND_VER_VALORACIONES
+from handlers.commands import *
 from utils.state_manager import *
 
 # Añadir directorio raíz al path para resolver importaciones
@@ -34,12 +31,6 @@ from utils.state_manager import *
 token_intentos_fallidos = {}  # {chat_id: número de intentos}
 token_bloqueados = {}  # {chat_id: tiempo de desbloqueo}
 token_usados = set()  # Conjunto de tokens ya utilizados
-
-# No puedo importarlos de main
-COMMAND_HELP = "help"
-COMMAND_VER_MIS_DATOS = "ver_misdatos"
-
-COMMAND_START = "start"
 
 # Calldata
 CANCELAR_REGISTRO = "cancelar_registro"

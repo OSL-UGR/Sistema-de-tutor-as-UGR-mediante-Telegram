@@ -9,12 +9,12 @@ from db.constantes import *
 
 from telebot import types
 
+from handlers.commands import COMMAND_CREAR_GRUPO_TUTORIA
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', filename='logs/grupos.log')
-
-COMMAND_CREAR_GRUPO_TUTORIA = 'crear_grupo_tutoria'
 
 # Calldata
 EDIT_GRUPO = "edit_grupo_"

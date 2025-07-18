@@ -5,11 +5,9 @@ import sys
 import os
 import time
 
+from handlers.commands import COMMAND_VALORAR_PROFESOR, COMMAND_VER_VALORACIONES
 from handlers.horarios import set_state
 from utils.state_manager import *
-
-COMMAND_VALORAR_PROFESOR = 'valorar_profesor'
-COMMAND_VER_VALORACIONES = 'ver_valoraciones'
 
 # Estados
 

@@ -6,6 +6,8 @@ import datetime
 import time  # Faltaba esta importación
 import logging  # Para usar logger
 
+from handlers.commands import COMMAND_TUTORIA 
+
 # Importar esta función al principio del archivo
 
 # Configurar logger
@@ -21,8 +23,6 @@ from db.queries import (
     get_usuarios_by_multiple_ids,
 )
 from db.constantes import *
-
-COMMAND_TUTORIA ='tutoria'
 
 # Calldata
 SOLICITAR_GRUPO = "solicitar_grupo_"

@@ -9,6 +9,7 @@ import os
 
 import telegram
 
+from handlers.commands import COMMAND_CONFIGURAR_HORARIO, COMMAND_VER_HORARIO
 from utils.state_manager import *
 # Add parent directory to system path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -23,9 +24,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
 DIAS_SEMANA_ORDEN = {"Lunes":1, "Martes":2, "Miércoles":3, "Jueves":4, "Viernes":5}
-
-COMMAND_CONFIGURAR_HORARIO = "configurar_horario"
-COMMAND_VER_HORARIO = "ver_horario"
 
 # Calldata
 DIA = "dia_"
