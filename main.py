@@ -118,9 +118,11 @@ def handle_ver_misdatos(message):
         grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=user[USUARIO_ID])
         
         if grupos and len(grupos) > 0:
-            print(grupos)
-            grupos.sort(key=lambda x: x[GRUPO_FECHA], reverse=True)
-            user_info += "\n*🔵 grupos de tutoría creadas:*\n"
+            for grupo in grupos:
+                if grupo[GRUPO_ID_ASIGNATURA] == None:
+                    grupo[GRUPO_ID_ASIGNATURA] = 0
+            grupos.sort(key=lambda x: x[GRUPO_ID_ASIGNATURA])
+            user_info += "\n*🔵 Grupos de tutoría creados:*\n"
             
             for grupo in grupos:
                 # Obtener asignatura o indicar que es general
@@ -128,10 +130,13 @@ def handle_ver_misdatos(message):
                 
                 # Formato de fecha más amigable
                 fecha = str(grupo[GRUPO_FECHA]).split(' ')[0] if grupo[GRUPO_FECHA] else 'Desconocida'
+                enlace = grupo[GRUPO_ENLACE] if grupo[GRUPO_ENLACE] else 'Sin enlace'
                 
                 user_info += f"• *{grupo[GRUPO_NOMBRE]}*\n"
                 user_info += f"  📚 Asignatura: {asignatura}\n"
-                user_info += f"  📅 Creada: {fecha}\n\n"
+                user_info += f"  📅 Creada: {fecha}\n"
+                user_info += f"  🔗 Enlace: {enlace}\n\n"
+
         else:
             user_info += "\n*🔵 No has creado grupos de tutoría todavía.*\n"
             user_info += "Usa /crear_ grupo _ tutoria para crear una nueva grupo.\n"
