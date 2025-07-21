@@ -288,22 +288,24 @@ def register_handlers(bot):
         grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_ID])
 
         if grupos and len(grupos) > 0:
-            grupos.sort(key=lambda x: x[GRUPO_FECHA], reverse=True)
-            user_info += "\n*🔵 grupos de tutoría creadas:*\n"
-
-            # Diccionario para traducir los propósitos a texto más amigable
-
             for grupo in grupos:
-                # Obtener propósito en formato legible
+                if grupo[GRUPO_ID_ASIGNATURA] == None:
+                    grupo[GRUPO_ID_ASIGNATURA] = 0
+            grupos.sort(key=lambda x: x[GRUPO_ID_ASIGNATURA])
+            user_info += "\n*🔵 Grupos de tutoría creados:*\n"
+            
+            for grupo in grupos:
                 # Obtener asignatura o indicar que es general
                 asignatura = grupo[GRUPO_ASIGNATURA] or 'General'
-
+                
                 # Formato de fecha más amigable
                 fecha = str(grupo[GRUPO_FECHA]).split(' ')[0] if grupo[GRUPO_FECHA] else 'Desconocida'
-
-                user_info += f"• *{grupo[GRUPO_NOMBRE]}*\n"
+                enlace = str(grupo[GRUPO_ENLACE]) if grupo[GRUPO_ENLACE] else 'Sin enlace'
+                
+                user_info += f"• {grupo[GRUPO_NOMBRE]}\n"
                 user_info += f"  📚 Asignatura: {asignatura}\n"
-                user_info += f"  📅 Creada: {fecha}\n\n"
+                user_info += f"  📅 Creada: {fecha}\n"
+                user_info += f"  🔗 Enlace: {enlace}\n\n"
         else:
             user_info += "\n*🔵 No has creado grupos de tutoría todavía.*\n"
             user_info += "Usa /crear_ grupo _ tutoria para crear una nueva grupo.\n"
@@ -311,7 +313,7 @@ def register_handlers(bot):
         # Solución para evitar crear un mensaje simulado
         try:
             if not is_return:
-                bot.send_message(chat_id, user_info, parse_mode="Markdown")
+                bot.send_message(chat_id, user_info)
 
             # Si es profesor y tiene grupos, mostrar botones para editar
             if get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_TIPO] == USUARIO_TIPO_PROFESOR and grupos and len(grupos) > 0:

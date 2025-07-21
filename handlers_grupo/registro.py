@@ -1,4 +1,4 @@
-from db.constantes import ASIGNATURA_ID, ASIGNATURA_NOMBRE, GRUPO_ASIGNATURA, GRUPO_ID, GRUPO_ID_ASIGNATURA, GRUPO_NOMBRE, GRUPO_PRIVADO, GRUPO_PUBLICO, MATRICULA_ASIGNATURA, MATRICULA_ID_ASIGNATURA, MATRICULA_PROFESOR, USUARIO_ID, USUARIO_NOMBRE, USUARIO_TIPO_PROFESOR
+from db.constantes import ASIGNATURA_ID, ASIGNATURA_NOMBRE, GRUPO_ID_ASIGNATURA, GRUPO_PRIVADO, GRUPO_PUBLICO, MATRICULA_ASIGNATURA, MATRICULA_ID_ASIGNATURA, MATRICULA_PROFESOR, USUARIO_APELLIDOS, USUARIO_ID, USUARIO_NOMBRE, USUARIO_TIPO_PROFESOR
 from db.queries import get_asignaturas, get_grupos_tutoria, get_matriculas, get_usuarios, insert_grupo_tutoria
 from telebot import types
 from handlers_grupo.utils import configurar_logger, es_profesor
@@ -162,7 +162,8 @@ def register_handlers(bot):
             asignatura_nombre = get_asignaturas(ASIGNATURA_ID=id_asignatura)[0][ASIGNATURA_NOMBRE]
 
             # Obtener Id_usuario del profesor a partir de su TelegramID
-            id_usuario_profesor = get_usuarios(USUARIO_ID_TELEGRAM=str(user_id))[0][USUARIO_ID]
+            profesor = get_usuarios(USUARIO_ID_TELEGRAM=str(user_id))[0]
+            id_usuario_profesor = profesor[USUARIO_ID]
 
             # Cerrar la conexión temporal
 
@@ -175,7 +176,7 @@ def register_handlers(bot):
             # Configurar directamente como grupo de avisos (pública)
             # CORRECCIÓN: Usar "pública" con tilde para cumplir con el constraint
             tipo_grupo = GRUPO_PUBLICO  # Cambiado de "publica" a "pública"
-            nuevo_nombre = f"{asignatura_nombre} - Avisos"
+            nuevo_nombre = f"{asignatura_nombre} - Prof. {profesor[USUARIO_NOMBRE]} {profesor[USUARIO_APELLIDOS]}"
 
             # Cambiar el nombre del grupo
             try:
@@ -245,7 +246,7 @@ def register_handlers(bot):
             # Obtener Id_usuario y nombre del profesor a partir de su TelegramID
             profesor = get_usuarios(USUARIO_ID_TELEGRAM=str(user_id))[0]
             id_usuario_profesor = profesor[USUARIO_ID]
-            nombre_profesor = profesor[USUARIO_NOMBRE]
+            nombre_profesor = profesor[USUARIO_NOMBRE] + " " + profesor[USUARIO_APELLIDOS]
 
 
             # Crear enlace de invitación si es posible

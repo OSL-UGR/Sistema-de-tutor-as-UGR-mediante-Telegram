@@ -63,7 +63,7 @@ def formatear_horario_bonito(horario_dict):
         return "No hay horario configurado"
     
     resultado = []
-    for dia, franjas in sorted(horario_dict.items()):
+    for dia, franjas in sorted(horario_dict.items(), key=lambda x: DIAS_SEMANA_ORDEN[x[0]]):
         if franjas:
             lineas_hora = [f"• {hora}" for hora in sorted(franjas)]
             resultado.append(f"📅 *{dia}*:\n{chr(10).join(lineas_hora)}")
