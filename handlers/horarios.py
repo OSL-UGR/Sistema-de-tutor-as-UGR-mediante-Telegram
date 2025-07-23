@@ -1,7 +1,5 @@
-import telebot
 from telebot import types
 import re
-import datetime
 import time
 import logging
 import sys

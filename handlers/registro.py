@@ -390,7 +390,8 @@ def register_handlers(bot):
                     telebot.types.BotCommand(f"/{COMMAND_HELP}", "Muestra la ayuda del bot"),
                     telebot.types.BotCommand(f"/{COMMAND_TUTORIA}", "Ver profesores disponibles para tutoría"),
                     telebot.types.BotCommand(f"/{COMMAND_VALORAR_PROFESOR}", "Valora un profesor"),
-                    telebot.types.BotCommand(f"/{COMMAND_VER_MIS_DATOS}", "Ver tus datos registrados")
+                    telebot.types.BotCommand(f"/{COMMAND_VER_MIS_DATOS}", "Ver tus datos registrados"),
+                    telebot.types.BotCommand(f"/{COMMAND_VER_REACCIONES}", "Ver reacciones recibidas")
                 ], scope=telebot.types.BotCommandScopeChat(chat_id))
             elif user and user[0][USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
                 bot.set_my_commands([
@@ -399,7 +400,8 @@ def register_handlers(bot):
                     telebot.types.BotCommand(f"/{COMMAND_VER_VALORACIONES}", "Ver valoraciones tuyas de alumnos"),
                     telebot.types.BotCommand(f"/{COMMAND_CREAR_GRUPO_TUTORIA}", "Crea un grupo de tutoría"),
                     telebot.types.BotCommand(f"/{COMMAND_CONFIGURAR_HORARIO}", "Configura tu horario de tutorías"),
-                    telebot.types.BotCommand(f"/{COMMAND_VER_MIS_DATOS}", "Ver tus datos registrados")
+                    telebot.types.BotCommand(f"/{COMMAND_VER_MIS_DATOS}", "Ver tus datos registrados"),
+                    telebot.types.BotCommand(f"/{COMMAND_VER_REACCIONES}", "Ver reacciones puestas")
                 ], scope=telebot.types.BotCommandScopeChat(chat_id))
             else:
                 bot.set_my_commands([

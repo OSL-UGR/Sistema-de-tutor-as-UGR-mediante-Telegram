@@ -22,8 +22,22 @@
    ```bash
    pip install -r requirements.txt
    ```
-4. Configura variables de entorno copiando `datos.env.example` a `datos.env` y completando los valores.
-5. Inicializa la base de datos (se auto-crea al iniciar el bot si no existe).
+   
+
+4. Crea la base de datos:
+
+   Crea una base de datos con el hcatset utf8mb4.
+   En mariaDB seria de la forma:
+   ```sql
+   CREATE DATABASE {DATABASE_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
+   ```
+
+5. Configura variables de entorno copiando `datos.env.example` a `datos.env` y completando los valores.
+6. Inicia el bot con:
+   ```bash
+   python main
+   python main_grupo
+   ```
 
 ---
 

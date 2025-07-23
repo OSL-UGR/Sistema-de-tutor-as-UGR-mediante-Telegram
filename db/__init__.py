@@ -13,6 +13,7 @@ try:
         host=DB_HOST,
         port=3306,
         database=DB_NAME,
+        charset="utf8mb4",
         autocommit=True,
     )
 except mysql.connector.Error as e:

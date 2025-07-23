@@ -235,9 +235,12 @@ if __name__ == "__main__":
         from handlers_grupo.usuarios import register_handlers as registrar_handlers_usuarios
         from handlers_grupo.registro import register_handlers as registrar_handlers_registro
         from handlers_grupo.tutorias import register_handlers as registrar_handlers_tutorias
+        from handlers_grupo.mensajes import register_handlers as registrar_handlers_mensajes
+
         registrar_handlers_usuarios(bot)
         registrar_handlers_registro(bot)
         registrar_handlers_tutorias(bot)
+        registrar_handlers_mensajes(bot)
         print("✅ Handler de nuevos estudiantes registrado")
                 
         # Usar polling con configuración mejorada
@@ -245,7 +248,7 @@ if __name__ == "__main__":
             none_stop=True, 
             interval=0, 
             timeout=60,
-            allowed_updates=["message", "callback_query", "chat_member", "my_chat_member"]  # Asegúrate de incluir chat_member
+            allowed_updates=["message", "callback_query", "chat_member", "my_chat_member", "message_reaction"]
         )
         
     except Exception as e:
