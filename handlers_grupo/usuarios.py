@@ -3,8 +3,6 @@ Manejadores específicos para la detección de estudiantes nuevos en grupos.
 Este módulo se encarga exclusivamente de dar la bienvenida a estudiantes
 cuando entran a un grupo donde está el bot.
 """
-from telebot import types
-import logging
 import os
 import sys
 
@@ -27,7 +25,7 @@ def register_handlers(bot):
     print("==================================================\n")
     
     # Importar la función correcta desde utils
-    from handlers_grupo.utils import menu_estudiante, menu_profesor
+    from handlers_grupo.utils import menu_estudiante
     
     # ID del bot para comparaciones
     global BOT_ID

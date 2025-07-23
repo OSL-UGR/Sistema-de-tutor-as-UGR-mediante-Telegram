@@ -2,7 +2,6 @@
 import logging
 import os
 import sys
-import telebot
 from config import BOT_GRUPO_NOMBRE
 from db.queries import delete_grupo_tutoria, get_grupos_tutoria, get_usuarios
 from db.constantes import *
@@ -288,9 +287,6 @@ def register_handlers(bot):
         grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_ID])
 
         if grupos and len(grupos) > 0:
-            for grupo in grupos:
-                if grupo[GRUPO_ID_ASIGNATURA] == None:
-                    grupo[GRUPO_ID_ASIGNATURA] = 0
             grupos.sort(key=lambda x: x[GRUPO_ID_ASIGNATURA])
             user_info += "\n*🔵 Grupos de tutoría creados:*\n"
             

@@ -36,6 +36,7 @@ def handle_help(message):
             f"/{COMMAND_TUTORIA} - Ver profesores disponibles para tutoría\n"
             f"/{COMMAND_VER_MIS_DATOS} - Ver tus datos registrados\n"
             f"/{COMMAND_VALORAR_PROFESOR} - Dar una valoración a un profesor\n"
+            f"/{COMMAND_VER_REACCIONES} - Ver reacciones recibidas\n"
         )
 
     if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
@@ -43,6 +44,7 @@ def handle_help(message):
             f"/{COMMAND_CONFIGURAR_HORARIO} - Configura tu horario de tutorías\n"
             f"/{COMMAND_CREAR_GRUPO_TUTORIA} - Crea un grupo de tutoría\n"
             f"/{COMMAND_VER_VALORACIONES} - Muestra datos de tus valoraciones\n"
+            f"/{COMMAND_VER_REACCIONES} - Ver reacciones puestas\n"
         )
     
     # Escapar los guiones bajos para evitar problemas de formato
@@ -174,6 +176,7 @@ from handlers.tutorias import register_handlers as register_tutorias_handlers
 from handlers.grupos import EDIT_GRUPO, register_handlers as register_grupos_handlers
 from handlers.horarios import register_handlers as register_horarios_handlers
 from handlers.valoraciones import register_handlers as register_valoraciones_handlers
+from handlers.reacciones import register_handlers as register_reacciones_handlers
 
 # Registrar todos los handlers
 register_registro_handlers(bot)
@@ -181,6 +184,7 @@ register_tutorias_handlers(bot)
 register_horarios_handlers(bot)
 register_valoraciones_handlers(bot)
 register_grupos_handlers(bot)
+register_reacciones_handlers(bot)
 
 def setup_polling():
     """Configura el polling para el bot y maneja errores"""

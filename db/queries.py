@@ -178,7 +178,7 @@ def get_asignaturas(**kwargs):
 ## ===== Grupos_tutoria =====
 ##===========================
 
-def insert_grupo_tutoria(usuario_id, nombre, tipo, asignatura_id = None, chat_id = None, enlace_invitacion = None, do_commit=True):
+def insert_grupo_tutoria(usuario_id, nombre, tipo, asignatura_id, chat_id = None, enlace_invitacion = None, do_commit=True):
     cursor = get_cursor()
     try:
         query = f"""INSERT INTO {GRUPOS} ({GRUPO_ID_PROFESOR}, {GRUPO_NOMBRE}, {GRUPO_TIPO}, {GRUPO_ID_ASIGNATURA}, {GRUPO_ID_CHAT}, {GRUPO_ENLACE}) 
@@ -390,5 +390,146 @@ def get_valoraciones(**kwargs):
         return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
         logging.getLogger('db.queries').error(f"Error al obtener valoración(es): {e}")
+        rollback()
+        return None
+
+
+
+##=======================
+## ===== Reacciones =====
+##=======================
+    
+
+def insert_reaccion(profesor_id, alumno_id, asignatura_id, emoji, cantidad, do_commit=True):
+    cursor = get_cursor()
+    try:
+        cursor.execute(
+            f"""INSERT INTO {REACCIONES} 
+                ({REACCION_ID_PROFESOR}, {REACCION_ID_ALUMNO}, {REACCION_ID_ASIGNATURA}, {REACCION_EMOJI}, {REACCION_CANTIDAD}) 
+                VALUES ({PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER})""",
+            (profesor_id, alumno_id,asignatura_id, emoji, cantidad)
+        )
+        if do_commit:
+            commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error al crear reacción: {e}")
+        rollback()
+        return None
+
+def update_reaccion(reaccion_id, do_commit=True, **kwargs):
+    """Actualiza los datos de una reacción"""
+    if not all(k in REACCION_CAMPOS_VALIDOS for k in kwargs):
+        raise ValueError("Campo inválido en la actualización de reacción")
+
+    try:
+        query = f"UPDATE {REACCIONES} SET "
+        query += ", ".join([f"{REACCION_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
+        query += f" WHERE {REACCION_ID} = {PLACEHOLDER}"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()) + [reaccion_id])
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Error al actualizar reacción: {e}")
+        rollback()
+        return False
+
+def delete_reaccion(reaccion_id, do_commit=True):
+    cursor = get_cursor()
+    try:
+        cursor.execute(f"DELETE FROM {REACCIONES} WHERE {REACCION_ID} = {PLACEHOLDER}", (reaccion_id,))
+        if do_commit:
+            commit()
+    except Exception as e:
+        print(f"Error al eliminar reacción: {e}")
+        rollback()
+
+def get_reacciones(**kwargs):
+    try:
+        if not all(k in REACCION_CAMPOS_VALIDOS for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de reacciones")
+
+        query = f"SELECT * FROM {REACCIONES} WHERE 1=1"
+        for k in kwargs:
+            query += f" AND {REACCION_FIELDS[k]} = {PLACEHOLDER}"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"Error al obtener reacción(es): {e}")
+        rollback()
+        return None
+    
+
+
+##=====================
+## ===== Mensajes =====
+##=====================
+
+
+def insert_mensaje(telegram_id, chat_id, sender_id, profesor_id, asignatura_id, texto, do_commit=True):
+    cursor = get_cursor()
+    try:
+        cursor.execute(
+            f"""INSERT INTO {MENSAJES} 
+            ({MENSAJE_ID_TELEGRAM}, {MENSAJE_ID_CHAT}, {MENSAJE_ID_SENDER}, 
+             {MENSAJE_ID_PROFESOR}, {MENSAJE_ID_ASIGNATURA}, {MENSAJE_TEXTO}) 
+            VALUES ({PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER})""",
+            (telegram_id, chat_id, sender_id, profesor_id, asignatura_id, texto)
+        )
+        if do_commit:
+            commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error al insertar mensaje: {e}")
+        rollback()
+        return None
+
+def update_mensaje(mensaje_id, do_commit=True, **kwargs):
+    if not all(k in MENSAJE_CAMPOS_VALIDOS for k in kwargs):
+        raise ValueError("Campo inválido en la actualización de mensaje")
+
+    try:
+        query = f"UPDATE {MENSAJES} SET "
+        query += ", ".join([f"{MENSAJE_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
+        query += f" WHERE {MENSAJE_ID} = {PLACEHOLDER}"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()) + [mensaje_id])
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Error al actualizar mensaje: {e}")
+        rollback()
+        return False
+
+def delete_mensaje(mensaje_id):
+    cursor = get_cursor()
+    try:
+        cursor.execute(f"DELETE FROM {MENSAJES} WHERE {MENSAJE_ID} = {PLACEHOLDER}", (mensaje_id,))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar mensaje: {e}")
+        rollback()
+
+def get_mensajes(**kwargs):
+    try:
+        if not all(k in MENSAJE_CAMPOS_VALIDOS for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Mensajes")
+
+        query = f"SELECT * FROM {MENSAJES} WHERE 1=1"
+        for k in kwargs:
+            query += f" AND {MENSAJE_FIELDS[k]} = {PLACEHOLDER}"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"Error al obtener mensaje(s): {e}")
         rollback()
         return None

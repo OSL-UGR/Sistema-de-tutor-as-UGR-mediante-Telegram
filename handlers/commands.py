@@ -7,3 +7,4 @@ COMMAND_VER_HORARIO = "ver_horario"
 COMMAND_TUTORIA ='tutoria'
 COMMAND_VALORAR_PROFESOR = 'valorar_profesor'
 COMMAND_VER_VALORACIONES = 'ver_valoraciones'
+COMMAND_VER_REACCIONES = 'ver_reacciones'
