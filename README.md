@@ -24,9 +24,8 @@
    ```
    
 
-4. Crea la base de datos:
+4. Crea una base de datos con el charset utf8mb4:
 
-   Crea una base de datos con el hcatset utf8mb4.
    En mariaDB seria de la forma:
    ```sql
    CREATE DATABASE {DATABASE_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_bin

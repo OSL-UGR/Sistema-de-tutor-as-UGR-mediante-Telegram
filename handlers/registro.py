@@ -401,7 +401,8 @@ def register_handlers(bot):
                     telebot.types.BotCommand(f"/{COMMAND_CREAR_GRUPO_TUTORIA}", "Crea un grupo de tutoría"),
                     telebot.types.BotCommand(f"/{COMMAND_CONFIGURAR_HORARIO}", "Configura tu horario de tutorías"),
                     telebot.types.BotCommand(f"/{COMMAND_VER_MIS_DATOS}", "Ver tus datos registrados"),
-                    telebot.types.BotCommand(f"/{COMMAND_VER_REACCIONES}", "Ver reacciones puestas")
+                    telebot.types.BotCommand(f"/{COMMAND_VER_REACCIONES}", "Ver reacciones puestas"),
+                    telebot.types.BotCommand(f"/{COMMAND_VER_MENSAJES}", "Ver historial de mensajes de asignaturas")
                 ], scope=telebot.types.BotCommandScopeChat(chat_id))
             else:
                 bot.set_my_commands([

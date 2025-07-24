@@ -29,16 +29,20 @@ def register_handlers(bot):
                 profesor_id = grupo[GRUPO_ID_PROFESOR]
                 asignatura_id = grupo[GRUPO_ID_ASIGNATURA]
                 sender = get_usuarios(USUARIO_ID_TELEGRAM=sender_id)
+                
                 if sender:
-                    sender = sender[0]
-                    insert_mensaje(
-                        telegram_id=telegram_id,
-                        chat_id=chat_id,
-                        sender_id=sender[USUARIO_ID],
-                        profesor_id=profesor_id,
-                        asignatura_id=asignatura_id,
-                        texto=message.text
-                    )
+                    sender = sender[0][USUARIO_ID]
+                else:
+                    sender = None
+
+                insert_mensaje(
+                    telegram_id=telegram_id,
+                    chat_id=chat_id,
+                    sender_id=sender,
+                    profesor_id=profesor_id,
+                    asignatura_id=asignatura_id,
+                    texto=message.text
+                )
                 print(f"Guardado mensaje {telegram_id} de usuario {sender_id} en chat {chat_id}")
 
         except Exception as e:

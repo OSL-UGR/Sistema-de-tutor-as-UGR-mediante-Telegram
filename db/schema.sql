@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS Mensajes (
     Mensaje_id INT AUTO_INCREMENT PRIMARY KEY,
     Telegram_id INT NOT NULL,
     Chat_id VARCHAR(100) NOT NULL,
-    Sender_id INT NOT NULL,
+    Sender_id INT,
     Profesor_id INT NOT NULL,
     Asignatura_id INT,
     Texto TEXT,
