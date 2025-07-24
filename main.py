@@ -45,6 +45,7 @@ def handle_help(message):
             f"/{COMMAND_CREAR_GRUPO_TUTORIA} - Crea un grupo de tutoría\n"
             f"/{COMMAND_VER_VALORACIONES} - Muestra datos de tus valoraciones\n"
             f"/{COMMAND_VER_REACCIONES} - Ver reacciones puestas\n"
+            f"/{COMMAND_VER_MENSAJES} - Ver historial de mensajes de asignaturas\n"
         )
     
     # Escapar los guiones bajos para evitar problemas de formato
@@ -176,7 +177,7 @@ from handlers.tutorias import register_handlers as register_tutorias_handlers
 from handlers.grupos import EDIT_GRUPO, register_handlers as register_grupos_handlers
 from handlers.horarios import register_handlers as register_horarios_handlers
 from handlers.valoraciones import register_handlers as register_valoraciones_handlers
-from handlers.reacciones import register_handlers as register_reacciones_handlers
+from handlers.mensajes import register_handlers as register_mensajes_handlers
 
 # Registrar todos los handlers
 register_registro_handlers(bot)
@@ -184,7 +185,7 @@ register_tutorias_handlers(bot)
 register_horarios_handlers(bot)
 register_valoraciones_handlers(bot)
 register_grupos_handlers(bot)
-register_reacciones_handlers(bot)
+register_mensajes_handlers(bot)
 
 def setup_polling():
     """Configura el polling para el bot y maneja errores"""
