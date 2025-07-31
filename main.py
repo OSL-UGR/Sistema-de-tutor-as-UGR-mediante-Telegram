@@ -4,7 +4,7 @@ from telebot import types
 import sys
 from config import BOT_TOKEN
 from db import close_connection
-from db.queries import get_grupos_tutoria, get_matriculas, get_usuarios
+from db.queries import get_grupos_tutoria, get_matriculas_asignatura_de_usuario, get_usuarios, get_usuarios_local
 from db.constantes import *
 from handlers.commands import *
 
@@ -15,7 +15,7 @@ bot = telebot.TeleBot(BOT_TOKEN)
 def handle_help(message):
     """Muestra la ayuda del bot"""
     chat_id = message.chat.id
-    user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)
+    user = get_usuarios_local(USUARIO_ID_TELEGRAM=message.from_user.id)
     
     if not user:
         bot.send_message(
@@ -77,11 +77,11 @@ def handle_ver_misdatos(message):
     user_dict = dict(user)
     
     # Obtener matrículas del usuario
-    matriculas = get_matriculas(MATRICULA_ID_USUARIO=user[USUARIO_ID])
+    matriculas = get_matriculas_asignatura_de_usuario(MATRICULA_ID_USUARIO=user[USUARIO_ID])
     
     user_info = (
         f"👤 *Datos de usuario:*\n\n"
-        f"*Nombre:* {user[USUARIO_NOMBRE]}\n"
+        f"*Nombre:* {user[USUARIO_NOMBRE]} {user[USUARIO_APELLIDOS]}\n"
         f"*Correo:* {user[USUARIO_EMAIL] or 'No registrado'}\n"
         f"*Tipo:* {user[USUARIO_TIPO].capitalize()}\n"
     )
@@ -94,7 +94,7 @@ def handle_ver_misdatos(message):
         for m in matriculas:
             # Convertir cada matrícula a diccionario si es necesario
             m_dict = dict(m) if hasattr(m, 'keys') else m
-            asignatura = m_dict.get(MATRICULA_ASIGNATURA, 'Desconocida')
+            asignatura = m_dict.get(MATRICULA_ASIGNATURA_NOMBRE, 'Desconocida')
             user_info += f"  - {asignatura}\n"
     else:
         user_info += "No tienes asignaturas matriculadas.\n"
@@ -128,15 +128,11 @@ def handle_ver_misdatos(message):
             user_info += "\n*🔵 Grupos de tutoría creados:*\n"
             
             for grupo in grupos:
-                # Obtener asignatura o indicar que es general
-                asignatura = grupo[GRUPO_ASIGNATURA] or 'General'
-                
                 # Formato de fecha más amigable
                 fecha = str(grupo[GRUPO_FECHA]).split(' ')[0] if grupo[GRUPO_FECHA] else 'Desconocida'
                 enlace = grupo[GRUPO_ENLACE] if grupo[GRUPO_ENLACE] else 'Sin enlace'
                 
                 user_info += f"• *{grupo[GRUPO_NOMBRE]}*\n"
-                user_info += f"  📚 Asignatura: {asignatura}\n"
                 user_info += f"  📅 Creada: {fecha}\n"
                 user_info += f"  🔗 Enlace: {enlace}\n\n"
 

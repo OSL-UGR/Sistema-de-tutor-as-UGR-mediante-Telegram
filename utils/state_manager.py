@@ -1,3 +1,4 @@
+from collections import defaultdict
 import time  # Añadir importación de time
 
 INITIAL_STATE = "INICIO"
@@ -16,8 +17,8 @@ COMENTARIO = "comentario"
 CHAT_ID = "chat_id"
 
 # Estados de usuario y datos temporales (compartidos entre módulos)
-user_states = {}
-user_data = {}
+user_states = defaultdict(dict)  # Usar defaultdict para evitar KeyError
+user_data = defaultdict(dict)  # Usar defaultdict para evitar KeyError
 estados_timestamp = {}  # Añadir esta variable
 
 def get_state(chat_id):

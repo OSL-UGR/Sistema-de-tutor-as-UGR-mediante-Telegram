@@ -1,9 +1,7 @@
-import telebot
 from telebot import types
 import datetime
 import sys
 import os
-import time
 
 from handlers.commands import COMMAND_VALORAR_PROFESOR, COMMAND_VER_VALORACIONES
 from handlers.horarios import set_state
@@ -27,7 +25,7 @@ VOLVER_VALORACIONES = "volver_valoraciones"
 
 # Añadir directorio padre al path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from db.queries import delete_valoracion, get_matriculas, get_usuarios_by_multiple_ids, get_valoraciones, insert_valoracion, get_usuarios
+from db.queries import delete_valoracion, get_matriculas_asignatura_de_usuario, get_usuarios_by_multiple_ids_local, get_usuarios_local, get_valoraciones, insert_valoracion, get_usuarios
 from db.constantes import *
 
 def register_handlers(bot):
@@ -38,6 +36,7 @@ def register_handlers(bot):
         """Maneja el comando para valorar a un profesor"""
         chat_id = message.chat.id
         user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)[0]
+        user_data[chat_id] = {}
         
         if not user:
             bot.send_message(
@@ -55,20 +54,19 @@ def register_handlers(bot):
         
         # Buscar profesores disponibles para valorar        
         # Obtener profesores de las asignaturas del estudiante
-        matriculas = get_matriculas(MATRICULA_ID_USUARIO=user[USUARIO_ID])
-        ids_asignaturas = []
-        
-        for matricula in matriculas:
-            ids_asignaturas.append(matricula[MATRICULA_ID_ASIGNATURA])
+        user_data[chat_id][MATRICULAS] = get_matriculas_asignatura_de_usuario(MATRICULA_ID_USUARIO=user[USUARIO_ID], MATRICULA_TIPO=MATRICULA_TODAS)
 
-        matriculas_profesores = get_matriculas(MATRICULA_TIPO=MATRICULA_PROFESOR)
-        ids_profesores = []
-
-        for matricula in matriculas_profesores:
-            if matricula[MATRICULA_ID_ASIGNATURA] in ids_asignaturas:
-                ids_profesores.append(matricula[MATRICULA_ID_USUARIO])
+        ids_profesores = {item[MATRICULA_ID_USUARIO] for item in user_data[chat_id][MATRICULAS] if item[MATRICULA_TIPO] == MATRICULA_PROFESOR}
         
-        profesores = get_usuarios_by_multiple_ids(ids_profesores)
+        profesores = get_usuarios_by_multiple_ids_local(ids_profesores)
+        for prof in profesores:
+            matricula = next(item for item in user_data[chat_id][MATRICULAS] if item[MATRICULA_ID_USUARIO] == prof[USUARIO_ID])
+            user_data[chat_id][prof[USUARIO_ID]] = prof
+            user_data[chat_id][prof[USUARIO_ID]][USUARIO_NOMBRE] = matricula[MATRICULA_USUARIO_NOMBRE]
+            user_data[chat_id][prof[USUARIO_ID]][USUARIO_APELLIDOS] = matricula[MATRICULA_USUARIO_APELLIDOS]
+
+        print(user_data[chat_id])
+            
         
         if not profesores:
             bot.send_message(
@@ -99,9 +97,9 @@ def register_handlers(bot):
     def handle_valorar(call):
         chat_id = call.message.chat.id
         profesor_id = int(call.data.split("_")[1])
-        user_id = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_ID]
+        user_id = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_ID]
         
-        profesor = get_usuarios(USUARIO_ID=profesor_id)[0]
+        profesor = user_data[chat_id][profesor_id]
         valoracion_actual = get_valoraciones(VALORACION_ID_EVALUADOR=user_id, VALORACION_ID_PROFESOR=profesor_id)
 
         if valoracion_actual != []:
@@ -156,7 +154,7 @@ def register_handlers(bot):
         chat_id = call.message.chat.id
         profesor_id = call.data.split("_")[1]
         opcion = call.data.split("_")[2]
-        user_id = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_ID]
+        user_id = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_ID]
         
         if opcion == SI:
             delete_valoracion(get_valoraciones(VALORACION_ID_EVALUADOR=user_id, VALORACION_ID_PROFESOR=profesor_id)[0][VALORACION_ID])
@@ -257,7 +255,7 @@ def register_handlers(bot):
         
         # Guardar valoración en la base de datos
         try:
-            evaluador_id = get_usuarios(USUARIO_ID_TELEGRAM=call.from_user.id)[0][USUARIO_ID]
+            evaluador_id = get_usuarios_local(USUARIO_ID_TELEGRAM=call.from_user.id)[0][USUARIO_ID]
             profesor_id = user_data[chat_id][PROFESOR_ID]
             puntuacion = user_data[chat_id][PUNTUACION]
             comentario = user_data[chat_id].get(COMENTARIO, "")
@@ -290,7 +288,7 @@ def register_handlers(bot):
     def handle_ver_valoraciones(message, get_text = False):
         """Muestra valoraciones recibidas"""
         chat_id = message.chat.id
-        user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)
+        user = get_usuarios_local(USUARIO_ID_TELEGRAM=message.from_user.id)
 
         # Verificar que el usuario es profesor
         if not user or user[0][USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
@@ -299,7 +297,11 @@ def register_handlers(bot):
                 "❌ Solo los profesores pueden versus valoraciones."
             )
             return
+        
         user = user[0]
+        if not get_text:
+            user_data[chat_id] = {}
+            user_data[chat_id][MATRICULAS] = get_matriculas_asignatura_de_usuario(MATRICULA_ID_USUARIO=user[USUARIO_ID], MATRICULA_TIPO=MATRICULA_TODAS)
 
         valoraciones = get_valoraciones(VALORACION_ID_PROFESOR=user[USUARIO_ID])
         total = 0
@@ -367,7 +369,7 @@ def register_handlers(bot):
     @bot.callback_query_handler(func=lambda call: call.data.startswith(VER_COMENTARIOS))
     def handle_ver_no_anonimas(call):
         chat_id = call.message.chat.id
-        user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0]
+        user = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0]
         valoraciones = get_valoraciones(VALORACION_ID_PROFESOR=user[USUARIO_ID])
 
         texto = "💯 Valoraciones comentadas (1-5⭐)\n\n"
@@ -377,12 +379,13 @@ def register_handlers(bot):
             for val in valoraciones:
                 if val[VALORACION_COMENTARIO]:
                     hay_comentadas = True
-                    alumno = get_usuarios(USUARIO_ID=val[VALORACION_ID_EVALUADOR])[0]
+                    print(f"Valoracion encontrada: {val}")
+                    matricula = next(item for item in user_data[chat_id][MATRICULAS] if item[MATRICULA_ID_USUARIO] == val[VALORACION_ID_EVALUADOR])
 
                     if val[VALORACION_ANONIMA] == VALORACION_SI_ANONIMA:
                         texto+= "• Anonimo: "
                     elif val[VALORACION_ANONIMA] == VALORACION_NO_ANONIMA:
-                        texto+= f"• {alumno[USUARIO_NOMBRE]} {alumno[USUARIO_APELLIDOS]}: "
+                        texto+= f"• {matricula[MATRICULA_USUARIO_NOMBRE]} {matricula[MATRICULA_USUARIO_APELLIDOS]}: "
                     
                     texto += (f"{val[VALORACION_PUNTUACION]}⭐\n"
 
@@ -412,7 +415,7 @@ def register_handlers(bot):
     @bot.callback_query_handler(func=lambda call: call.data.startswith(VER_NO_ANONIMAS))
     def handle_ver_no_anonimas(call):
         chat_id = call.message.chat.id
-        user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0]
+        user = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0]
         valoraciones = get_valoraciones(VALORACION_ID_PROFESOR=user[USUARIO_ID], VALORACION_ANONIMA=VALORACION_NO_ANONIMA)
 
         texto = "💯 Valoraciones publicas (1-5⭐)\n\n"
@@ -425,8 +428,8 @@ def register_handlers(bot):
                     current_score = val[VALORACION_PUNTUACION]
                     texto += f"• " + current_score*"⭐" + f"({current_score}):\n"
 
-                alumno = get_usuarios(USUARIO_ID=val[VALORACION_ID_EVALUADOR])[0]
-                texto+= f"  -{alumno[USUARIO_NOMBRE]} {alumno[USUARIO_APELLIDOS]}\n"
+                matricula = next(item for item in user_data[chat_id][MATRICULAS] if item[MATRICULA_ID_USUARIO] == val[VALORACION_ID_EVALUADOR])
+                texto+= f"  -{matricula[MATRICULA_USUARIO_NOMBRE]} {matricula[MATRICULA_USUARIO_APELLIDOS]}\n"
         else:
             texto += "No hay valoraciones publicas\n"
 

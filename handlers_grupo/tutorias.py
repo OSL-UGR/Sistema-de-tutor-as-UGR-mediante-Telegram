@@ -1,5 +1,5 @@
 from db.constantes import GRUPO_ID, USUARIO_TIPO, USUARIO_TIPO_PROFESOR
-from db.queries import get_grupos_tutoria, get_usuarios, update_grupo_tutoria
+from db.queries import get_grupos_tutoria, get_usuarios_local, update_grupo_tutoria
 
 from telebot import types
 import time
@@ -38,7 +38,7 @@ def register_handlers(bot):
             grupo = grupo[0]
 
             # Verificar el rol del usuario
-            user = get_usuarios(USUARIO_ID_TELEGRAM=user_id)
+            user = get_usuarios_local(USUARIO_ID_TELEGRAM=user_id)
 
             if not user:
                 bot.send_message(chat_id, "No estás registrado en el sistema.")
@@ -71,15 +71,6 @@ def register_handlers(bot):
 
                     bot.delete_message(chat_id, mensaje.id)
 
-                    # Enviar mensaje privado al estudiante
-                    try:
-                        bot.send_message(
-                            estudiante_id,
-                            "El profesor ha finalizado tu sesión de tutoría. ¡Gracias por participar!"
-                        )
-                    except Exception as dm_error:
-                        print(f"No se pudo enviar mensaje privado al estudiante: {dm_error}")
-
                 except Exception as e:
                     print(f"❌ Error al expulsar estudiante: {e}")
                     bot.send_message(
@@ -109,15 +100,6 @@ def register_handlers(bot):
                     clear_state(chat_id)
 
                     bot.delete_message(chat_id, mensaje.id)
-
-                    # Enviar mensaje privado al estudiante
-                    try:
-                        bot.send_message(
-                            user_id,
-                            "Has finalizado tu sesión de tutoría. ¡Gracias por participar!"
-                        )
-                    except Exception as dm_error:
-                        print(f"No se pudo enviar mensaje privado al usuario: {dm_error}")
 
                 except Exception as e:
                     print(f"❌ Error en auto-expulsión: {e}")

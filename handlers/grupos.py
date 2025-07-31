@@ -3,7 +3,7 @@ import logging
 import os
 import sys
 from config import BOT_GRUPO_NOMBRE
-from db.queries import delete_grupo_tutoria, get_grupos_tutoria, get_usuarios
+from db.queries import delete_grupo_tutoria, get_grupos_tutoria, get_usuarios, get_usuarios_local
 from db.constantes import *
 
 from telebot import types
@@ -38,8 +38,7 @@ def register_handlers(bot):
             print(f"🔍 grupo ID a editar: {grupo_id}")
 
             # Verificar que el usuario es el propietario de la grupo
-            user = get_usuarios(USUARIO_ID_TELEGRAM=call.from_user.id)[0]
-            print(f"👤 Usuario: {user[USUARIO_NOMBRE] if user else 'No encontrado'}")
+            user = get_usuarios_local(USUARIO_ID_TELEGRAM=call.from_user.id)[0]
 
             if not user or user[USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
                 print("⚠️ Usuario no es profesor o no existe")
@@ -76,13 +75,11 @@ def register_handlers(bot):
 
             # Preparar textos seguros para Markdown
             nombre_grupo = grupo[GRUPO_NOMBRE]
-            nombre_asignatura = grupo[GRUPO_ASIGNATURA] or 'General'
 
             print(f"📤 Enviando mensaje de edición")
             bot.edit_message_text(
                 f"🔄 *Gestionar grupo*\n\n"
                 f"*grupo:* {nombre_grupo}\n"
-                f"*Asignatura:* {nombre_asignatura}\n\n"
                 f"Selecciona la acción que deseas realizar:",
                 chat_id=chat_id,
                 message_id=call.message.message_id,
@@ -143,7 +140,7 @@ def register_handlers(bot):
             print(f"🔍 grupo ID a eliminar: {grupo_id}")
 
             # Verificar que el usuario es el propietario de la grupo
-            user = get_usuarios(USUARIO_ID_TELEGRAM=call.from_user.id)[0]
+            user = get_usuarios_local(USUARIO_ID_TELEGRAM=call.from_user.id)[0]
 
             if not user or user[USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
                 print("⚠️ Usuario no es profesor o no existe")
@@ -163,7 +160,6 @@ def register_handlers(bot):
 
             # Preparar textos seguros para Markdown
             nombre_grupo = grupo[GRUPO_NOMBRE]
-            nombre_asignatura = grupo[GRUPO_ASIGNATURA] or 'General'
 
             # Confirmar la eliminación con botones
             markup = types.InlineKeyboardMarkup(row_width=1)
@@ -182,7 +178,6 @@ def register_handlers(bot):
             bot.edit_message_text(
                 f"⚠️ *¿Estás seguro de que deseas eliminar esta grupo?*\n\n"
                 f"*grupo:* {nombre_grupo}\n"
-                f"*Asignatura:* {nombre_asignatura}\n"
                 f"Esta acción es irreversible. El grupo será eliminado de la base de datos ",
                 chat_id=chat_id,
                 message_id=call.message.message_id,
@@ -210,7 +205,7 @@ def register_handlers(bot):
             print(f"🔍 grupo ID a eliminar definitivamente: {grupo_id}")
 
             # Verificar que el usuario es el propietario de la grupo
-            user = get_usuarios(USUARIO_ID_TELEGRAM=call.from_user.id)[0]
+            user = get_usuarios_local(USUARIO_ID_TELEGRAM=call.from_user.id)[0]
 
             if not user or user[USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
                 print("⚠️ Usuario no es profesor o no existe")
@@ -284,22 +279,18 @@ def register_handlers(bot):
         
         user_info = ""
 
-        grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_ID])
+        grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_ID])
 
         if grupos and len(grupos) > 0:
             grupos.sort(key=lambda x: x[GRUPO_ID_ASIGNATURA])
             user_info += "\n*🔵 Grupos de tutoría creados:*\n"
             
-            for grupo in grupos:
-                # Obtener asignatura o indicar que es general
-                asignatura = grupo[GRUPO_ASIGNATURA] or 'General'
-                
+            for grupo in grupos:                
                 # Formato de fecha más amigable
                 fecha = str(grupo[GRUPO_FECHA]).split(' ')[0] if grupo[GRUPO_FECHA] else 'Desconocida'
                 enlace = str(grupo[GRUPO_ENLACE]) if grupo[GRUPO_ENLACE] else 'Sin enlace'
                 
                 user_info += f"• {grupo[GRUPO_NOMBRE]}\n"
-                user_info += f"  📚 Asignatura: {asignatura}\n"
                 user_info += f"  📅 Creada: {fecha}\n"
                 user_info += f"  🔗 Enlace: {enlace}\n\n"
         else:
@@ -312,7 +303,7 @@ def register_handlers(bot):
                 bot.send_message(chat_id, user_info)
 
             # Si es profesor y tiene grupos, mostrar botones para editar
-            if get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_TIPO] == USUARIO_TIPO_PROFESOR and grupos and len(grupos) > 0:
+            if get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0][USUARIO_TIPO] == USUARIO_TIPO_PROFESOR and grupos and len(grupos) > 0:
                 markup = types.InlineKeyboardMarkup(row_width=1)
             
                 # Añadir SOLO botones para editar cada grupo (quitar botones de eliminar)
@@ -346,7 +337,7 @@ def register_handlers(bot):
     def crear_grupo(message, is_return = False):
         """Proporciona instrucciones para crear un grupo de tutoría en Telegram"""
         chat_id = message.chat.id
-        user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)[0]
+        user = get_usuarios_local(USUARIO_ID_TELEGRAM=message.from_user.id)[0]
 
         # Verificar que el usuario es profesor
         if not user or user[USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:

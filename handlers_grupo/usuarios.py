@@ -117,11 +117,6 @@ def register_handlers(bot):
                         chat_id,
                         f"✅ Ha finalizado su sesión de tutoría con {nombre}."
                     )
-                    # Informar por dm
-                    bot.send_message(
-                        user_id,
-                        "👋 Has finalizado tu sesión de tutoría. ¡Gracias por participar!"
-                    )
                 except Exception as dm_error:
                     print(f"No se pudo enviar mensaje privado al usuario: {dm_error}")
 
