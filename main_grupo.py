@@ -68,7 +68,7 @@ def prevent_duplicate_instances(port=12345):
 prevent_duplicate_instances()
 
 # Importar funciones de la base de datos compartidas
-from db.queries import get_grupos_tutoria, get_usuarios
+from db.queries import get_grupos_tutoria, get_usuarios_local
 from db.constantes import *
 
 # Handlers básicos
@@ -76,7 +76,7 @@ from db.constantes import *
 def send_welcome(message):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    user = get_usuarios(USUARIO_ID_TELEGRAM=user_id)
+    user = get_usuarios_local(USUARIO_ID_TELEGRAM=user_id)
     
     if not user:
         bot.send_message(
@@ -136,7 +136,7 @@ def send_welcome(message):
                 reply_markup=menu_estudiante()
             )
     
-    logger.info(f"Usuario {user_id} ({user[USUARIO_NOMBRE]}) ha iniciado el bot en chat {chat_id}")
+    logger.info(f"Usuario {user_id} ha iniciado el bot en chat {chat_id}")
 
 @bot.message_handler(commands=[COMMAND_HELP])
 def help_handler(message):

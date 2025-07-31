@@ -1,8 +1,7 @@
-from db.constantes import ASIGNATURA_ID, ASIGNATURA_NOMBRE, GRUPO_ID_ASIGNATURA, GRUPO_PRIVADO, GRUPO_PUBLICO, MATRICULA_ASIGNATURA, MATRICULA_ID_ASIGNATURA, MATRICULA_PROFESOR, USUARIO_APELLIDOS, USUARIO_ID, USUARIO_NOMBRE, USUARIO_TIPO_PROFESOR
-from db.queries import get_asignaturas, get_grupos_tutoria, get_matriculas, get_usuarios, insert_grupo_tutoria
+from db.constantes import *
+from db.queries import get_asignaturas, get_grupos_tutoria, get_matriculas_asignatura_de_usuario, get_usuarios, create_grupo_tutoria, get_usuarios_local
 from telebot import types
-from handlers_grupo.utils import configurar_logger, es_profesor
-import telebot
+from handlers_grupo.utils import configurar_logger
 
 # Estados
 
@@ -32,7 +31,7 @@ def register_handlers(bot):
             return
 
         # Verificar que el usuario es profesor
-        if not es_profesor(user_id):
+        if not get_usuarios_local(USUARIO_ID_TELEGRAM=user_id, USUARIO_TIPO=USUARIO_TIPO_PROFESOR):
             bot.send_message(chat_id, "⚠️ Solo los profesores pueden configurar grupos.")
             return
 
@@ -57,7 +56,7 @@ def register_handlers(bot):
             return
 
         # Obtener ID del usuario profesor
-        profesor_row = get_usuarios(USUARIO_ID_TELEGRAM=str(user_id), USUARIO_TIPO=USUARIO_TIPO_PROFESOR)
+        profesor_row = get_usuarios_local(USUARIO_ID_TELEGRAM=str(user_id), USUARIO_TIPO=USUARIO_TIPO_PROFESOR)
 
         if not profesor_row:
             bot.send_message(chat_id, "⚠️ Solo los profesores registrados pueden configurar grupos.")
@@ -69,14 +68,14 @@ def register_handlers(bot):
 
         # Obtener SOLO asignaturas sin grupo de avisos asociada
 
-        asignaturas_profesor = get_matriculas(MATRICULA_ID_USUARIO=profesor_id, MATRICULA_TIPO=MATRICULA_PROFESOR)
+        asignaturas_profesor = get_matriculas_asignatura_de_usuario(MATRICULA_ID_USUARIO=profesor_id, MATRICULA_TIPO=MATRICULA_PROFESOR)
         grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=profesor_id, GRUPO_TIPO=GRUPO_PUBLICO)
         ids_grupos = [grupo[GRUPO_ID_ASIGNATURA] for grupo in grupos]
 
         asignaturas_disponibles = []
 
         for asignatura in asignaturas_profesor:
-            if asignatura[ASIGNATURA_ID] not in ids_grupos:
+            if asignatura[MATRICULA_ID_ASIGNATURA] not in ids_grupos:
                 asignaturas_disponibles.append(asignatura)
 
         # Verificar si ya tiene grupo de tutoría privada
@@ -97,7 +96,7 @@ def register_handlers(bot):
         if asignaturas_disponibles:
             for asig in asignaturas_disponibles:
                 callback_data = f"{CONFIG_ASIG}{asig[MATRICULA_ID_ASIGNATURA]}"
-                markup.add(types.InlineKeyboardButton(text=asig[MATRICULA_ASIGNATURA], callback_data=callback_data))
+                markup.add(types.InlineKeyboardButton(text=asig[MATRICULA_ASIGNATURA_NOMBRE], callback_data=callback_data))
 
         # Añadir opción de tutoría privada SOLO si no tiene una ya
         if not tiene_privada:
@@ -159,7 +158,7 @@ def register_handlers(bot):
         try:
             # Registrar el grupo en la base de datos
             # Obtener nombre de la asignatura
-            asignatura_nombre = get_asignaturas(ASIGNATURA_ID=id_asignatura)[0][ASIGNATURA_NOMBRE]
+            asignatura_nombre = get_asignaturas(ASIGNATURA_ID=id_asignatura)[0][ASIGNATURA_NOMBRE_CORTO]
 
             # Obtener Id_usuario del profesor a partir de su TelegramID
             profesor = get_usuarios(USUARIO_ID_TELEGRAM=str(user_id))[0]
@@ -185,7 +184,7 @@ def register_handlers(bot):
                 logger.warning(f"No se pudo cambiar el nombre del grupo: {e}")
 
             # Crear el grupo en la base de datos
-            insert_grupo_tutoria(
+            create_grupo_tutoria(
                 id_usuario_profesor,
                 nuevo_nombre,
                 tipo_grupo,  # Ahora con el valor correcto "pública"
@@ -266,7 +265,7 @@ def register_handlers(bot):
                 logger.warning(f"No se pudo cambiar el nombre del grupo: {e}")
 
             # Crear el grupo en la base de datos
-            insert_grupo_tutoria(
+            create_grupo_tutoria(
                 id_usuario_profesor,
                 nuevo_nombre,
                 tipo_grupo,

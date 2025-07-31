@@ -13,7 +13,7 @@ from utils.state_manager import *
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Now import after modifying the path
 
-from db.queries import update_usuario, get_usuarios
+from db.queries import get_usuarios_local, update_usuario
 from db.constantes import *
 
 # Configuración del logger
@@ -80,7 +80,7 @@ def guardar_horario_bd(chat_id, horario_dict):
                 horario_str += f"{dia} {franja}"
         
         # Obtener el ID del usuario a partir del ID de Telegram
-        user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0]
+        user = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0]
         if not user:
             logger.error(f"No se encontró usuario con telegram_id {chat_id}")
             return False
@@ -107,7 +107,7 @@ def cargar_horario_bd(chat_id):
                
 
         # Verificar primero si el usuario existe
-        usuario = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0]
+        usuario = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0]
         
         if not usuario:
             print(f"No se encontró usuario con telegram_id {chat_id}")
@@ -183,7 +183,7 @@ def register_handlers(bot):
         
         # Verificar si es profesor
         try:
-            user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)[0]
+            user = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0]
             if not user or user[USUARIO_TIPO].lower() != USUARIO_TIPO_PROFESOR:
                 bot.send_message(chat_id, "⚠️ Solo los profesores pueden configurar horarios de tutoría.")
                 return
@@ -560,7 +560,7 @@ def register_handlers(bot):
         
         # Verificar si es profesor
         try:
-            user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)
+            user = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)
             if not user:
                 bot.send_message(chat_id, "⚠️ No se encontraron tus datos en el sistema.")
                 return

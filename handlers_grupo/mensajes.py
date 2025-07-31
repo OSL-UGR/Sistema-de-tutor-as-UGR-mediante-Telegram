@@ -5,7 +5,7 @@ import sys
 from handlers_grupo.tutorias import COMMAND_FINALIZAR
 from handlers_grupo.utils import configurar_logger
 from utils.state_manager import *
-from db.queries import delete_reaccion, get_grupos_tutoria, get_mensajes, get_reacciones, get_usuarios, insert_mensaje, insert_reaccion, update_reaccion
+from db.queries import delete_reaccion, get_grupos_tutoria, get_mensajes, get_reacciones, get_usuarios_local, insert_mensaje, insert_reaccion, update_reaccion
 from db.constantes import *
 
 # Configuración de ruta para importar correctamente
@@ -28,7 +28,7 @@ def register_handlers(bot):
                 grupo = grupo[0]
                 profesor_id = grupo[GRUPO_ID_PROFESOR]
                 asignatura_id = grupo[GRUPO_ID_ASIGNATURA]
-                sender = get_usuarios(USUARIO_ID_TELEGRAM=sender_id)
+                sender = get_usuarios_local(USUARIO_ID_TELEGRAM=sender_id)
                 
                 if sender:
                     sender = sender[0][USUARIO_ID]
@@ -61,7 +61,7 @@ def register_handlers(bot):
             removed_reactions = update.old_reaction or []
 
             mensaje = get_mensajes(MENSAJE_ID_CHAT=chat_id, MENSAJE_ID_TELEGRAM=msg_id)
-            profesor = get_usuarios(USUARIO_ID_TELEGRAM=user.id)
+            profesor = get_usuarios_local(USUARIO_ID_TELEGRAM=user.id)
 
             if profesor and mensaje and profesor[0][USUARIO_TIPO]==USUARIO_TIPO_PROFESOR:
                 profesor = profesor[0]

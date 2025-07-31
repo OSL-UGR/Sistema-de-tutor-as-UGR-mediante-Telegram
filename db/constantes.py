@@ -7,38 +7,31 @@ PLACEHOLDER = f"%s"
 USUARIOS = "Usuarios"
 
 # Constantes de campos válidos en la base de datos
-USUARIO_ID = "Usuario_id"
-USUARIO_NOMBRE = "Nombre"
-USUARIO_APELLIDOS = "Apellidos"
-USUARIO_TIPO = "Tipo"
-USUARIO_EMAIL = "Email_UGR"
-USUARIO_ID_TELEGRAM = "TelegramID"
-USUARIO_HORARIO = "Horario"
-
-# Conjunto de campos válidos (para validación rápida)
-USUARIO_CAMPOS_VALIDOS = {
-    "USUARIO_ID",
-    "USUARIO_NOMBRE",
-    "USUARIO_APELLIDOS",
-    "USUARIO_TIPO",
-    "USUARIO_EMAIL",
-    "USUARIO_ID_TELEGRAM",
-    "USUARIO_HORARIO",
-}
+USUARIO_ID = "id"
+USUARIO_ID_MOODLE = "moodle_id"
+USUARIO_TIPO = "tipo"
+USUARIO_NOMBRE = "firstname"
+USUARIO_APELLIDOS = "lastname"
+USUARIO_EMAIL = "email"
+USUARIO_ID_TELEGRAM = "telegram_id"
+USUARIO_HORARIO = "horario"
 
 USUARIO_FIELDS = {
     "USUARIO_ID":USUARIO_ID,
+    "USUARIO_ID_MOODLE": USUARIO_ID_MOODLE,
+    "USUARIO_TIPO":USUARIO_TIPO,
     "USUARIO_NOMBRE":USUARIO_NOMBRE,
     "USUARIO_APELLIDOS":USUARIO_APELLIDOS,
-    "USUARIO_TIPO":USUARIO_TIPO,
     "USUARIO_EMAIL":USUARIO_EMAIL,
     "USUARIO_ID_TELEGRAM":USUARIO_ID_TELEGRAM,
     "USUARIO_HORARIO":USUARIO_HORARIO,
 }
 
+USUARIO_CAMPOS_VALIDOS = set(USUARIO_FIELDS.keys())
+
 # Posibles valores campos
-USUARIO_TIPO_PROFESOR = "profesor"
-USUARIO_TIPO_ESTUDIANTE = "estudiante"
+USUARIO_TIPO_PROFESOR = "editingteacher"
+USUARIO_TIPO_ESTUDIANTE = "student"
 
 
 
@@ -46,22 +39,17 @@ USUARIO_TIPO_ESTUDIANTE = "estudiante"
 ## ===== Asignaturas =====
 ##========================
 
-ASIGNATURAS = "Asignaturas"
+ASIGNATURA_ID = "id"
+ASIGNATURA_NOMBRE = "fullname"
+ASIGNATURA_NOMBRE_CORTO = "shortname"
 
-# Constantes de campos de la tabla ASIGNATURAS
-ASIGNATURA_ID = "Asignatura_id"
-ASIGNATURA_NOMBRE = "Nombre"
-
-# Conjunto de campos válidos (para validación)
-ASIGNATURA_CAMPOS_VALIDOS = {
-    "ASIGNATURA_ID",
-    "ASIGNATURA_NOMBRE",
+ASIGNATURA_FIELDS = {
+    "ASIGNATURA_ID": ASIGNATURA_ID,
+    "ASIGNATURA_NOMBRE": ASIGNATURA_NOMBRE,
+    "ASIGNATURA_NOMBRE_CORTO": ASIGNATURA_NOMBRE_CORTO,
 }
 
-ASIGNATURA_FIELDS = { 
-    "ASIGNATURA_ID":ASIGNATURA_ID,
-    "ASIGNATURA_NOMBRE":ASIGNATURA_NOMBRE,
-}
+ASIGNATURA_CAMPOS_VALIDOS = set(ASIGNATURA_FIELDS.keys())
 
 
 
@@ -72,29 +60,15 @@ ASIGNATURA_FIELDS = {
 GRUPOS = "Grupos_tutoria"
 
 # Constantes de campos de la tabla GRUPOS o SALAS
-GRUPO_ID = "Grupo_id"
-GRUPO_ID_PROFESOR = "Profesor_id"
-GRUPO_NOMBRE = "Nombre_grupo"
-GRUPO_TIPO = "Tipo_grupo"
-GRUPO_ID_ASIGNATURA = "Asignatura_id"
-GRUPO_ID_CHAT = "Chat_id"
-GRUPO_ENLACE = "Enlace_invitacion"
-GRUPO_PROFESOR = "Profesor"
-GRUPO_ASIGNATURA = "Asignatura"
-GRUPO_FECHA = "Fecha_creacion"
-GRUPO_EN_USO = "En_uso"
-
-# Conjunto de campos válidos para validación
-GRUPO_CAMPOS_VALIDOS = {
-    "GRUPO_ID",
-    "GRUPO_ID_PROFESOR",
-    "GRUPO_NOMBRE",
-    "GRUPO_TIPO",
-    "GRUPO_ID_ASIGNATURA",
-    "GRUPO_ID_CHAT",
-    "GRUPO_ENLACE",
-    "GRUPO_EN_USO",
-}
+GRUPO_ID = "grupo_id"
+GRUPO_ID_PROFESOR = "profesor_id"
+GRUPO_NOMBRE = "nombre_grupo"
+GRUPO_TIPO = "tipo_grupo"
+GRUPO_ID_ASIGNATURA = "asignatura_id"
+GRUPO_ID_CHAT = "chat_id"
+GRUPO_ENLACE = "enlace_invitacion"
+GRUPO_FECHA = "fecha_creacion"
+GRUPO_EN_USO = "en_uso"
 
 GRUPO_FIELDS = {           
     "GRUPO_ID":GRUPO_ID,
@@ -107,9 +81,12 @@ GRUPO_FIELDS = {
     "GRUPO_EN_USO":GRUPO_EN_USO
 }
 
+# Conjunto de campos válidos para validación
+GRUPO_CAMPOS_VALIDOS = set(GRUPO_FIELDS.keys())
+
 # Posibles valores campos
-GRUPO_PUBLICO = "pública"
-GRUPO_PRIVADO = "privada"
+GRUPO_PUBLICO = "público"
+GRUPO_PRIVADO = "privado"
 
 
 
@@ -120,32 +97,35 @@ GRUPO_PRIVADO = "privada"
 MATRICULAS = "Matriculas"
 
 # Constantes de campos de la tabla MATRICULAS
-MATRICULA_ID = "Matricula_id"
-MATRICULA_ID_USUARIO = "Usuario_id"
-MATRICULA_ID_ASIGNATURA = "Asignatura_id"
-MATRICULA_TIPO = "Tipo"
-MATRICULA_ASIGNATURA= "Asignatura"
-MATRICULA_CODIGO= "Codigo"
-MATRICULA_CARRERA= "Carrera"
-
-# Conjunto de campos válidos para validación
-MATRICULA_CAMPOS_VALIDOS = {
-    "MATRICULA_ID",
-    "MATRICULA_ID_USUARIO",
-    "MATRICULA_ID_ASIGNATURA",
-    "MATRICULA_TIPO",
-}
+MATRICULA_ID_USUARIO = "id"
+MATRICULA_ID_MOODLE = "userid"
+MATRICULA_ID_ASIGNATURA = "courseid"
+MATRICULA_TIPO = "tipo"
+MATRICULA_ASIGNATURA_NOMBRE= "asignatura_nombre"
+MATRICULA_ASIGNATURA_NOMBRE_CORTO = "asignatura_nombre_corto"
+MATRICULA_USUARIO_NOMBRE = "nombre"
+MATRICULA_USUARIO_APELLIDOS = "apellidos"
+MATRICULA_USUARIO_EMAIL = "email"
 
 MATRICULA_FIELDS = {           
-    "MATRICULA_ID":MATRICULA_ID,
     "MATRICULA_ID_USUARIO":MATRICULA_ID_USUARIO,
+    "MATRICULA_ID_MOODLE": MATRICULA_ID_MOODLE,
     "MATRICULA_ID_ASIGNATURA":MATRICULA_ID_ASIGNATURA,
     "MATRICULA_TIPO":MATRICULA_TIPO,
+    "MATRICULA_ASIGNATURA_NOMBRE": MATRICULA_ASIGNATURA_NOMBRE,
+    "MATRICULA_ASIGNATURA_NOMBRE_CORTO": MATRICULA_ASIGNATURA_NOMBRE_CORTO,
+    "MATRICULA_USUARIO_NOMBRE": MATRICULA_USUARIO_NOMBRE,
+    "MATRICULA_USUARIO_APELLIDOS": MATRICULA_USUARIO_APELLIDOS,
+    "MATRICULA_USUARIO_EMAIL": MATRICULA_USUARIO_EMAIL,
 }
 
+# Conjunto de campos válidos para validación
+MATRICULA_CAMPOS_VALIDOS = set(MATRICULA_FIELDS.keys())
+
 # Posibles valores campos
-MATRICULA_ESTUDIANTE = "estudiante"
-MATRICULA_PROFESOR = "docente"
+MATRICULA_ESTUDIANTE = "student"
+MATRICULA_PROFESOR = "editingteacher"
+MATRICULA_TODAS = "todas"  # Para obtener todas las matrículas, tanto de estudiantes como de profesores
 
 
 
@@ -156,24 +136,13 @@ MATRICULA_PROFESOR = "docente"
 VALORACIONES = "Valoraciones"
 
 # Constantes de campos de la tabla VALORACIONES
-VALORACION_ID = "Valoracion_id"
-VALORACION_ID_EVALUADOR = "Evaluador_id"
-VALORACION_ID_PROFESOR = "Profesor_id"
-VALORACION_PUNTUACION = "Puntuacion"
-VALORACION_COMENTARIO = "Comentario"
-VALORACION_FECHA = "Fecha"
-VALORACION_ANONIMA = "Anonimo"
-
-# Conjunto de campos válidos (para validación)
-VALORACION_CAMPOS_VALIDOS = {
-    "VALORACION_ID",
-    "VALORACION_ID_EVALUADOR",
-    "VALORACION_ID_PROFESOR",
-    "VALORACION_PUNTUACION",
-    "VALORACION_COMENTARIO",
-    "VALORACION_FECHA",
-    "VALORACION_ANONIMA",
-}
+VALORACION_ID = "valoracion_id"
+VALORACION_ID_EVALUADOR = "evaluador_id"
+VALORACION_ID_PROFESOR = "profesor_id"
+VALORACION_PUNTUACION = "puntuacion"
+VALORACION_COMENTARIO = "comentario"
+VALORACION_FECHA = "fecha"
+VALORACION_ANONIMA = "anonimo"
 
 VALORACION_FIELDS = { 
     "VALORACION_ID":VALORACION_ID,
@@ -185,6 +154,9 @@ VALORACION_FIELDS = {
     "VALORACION_ANONIMA":VALORACION_ANONIMA,
 }
 
+# Conjunto de campos válidos (para validación)
+VALORACION_CAMPOS_VALIDOS = set(VALORACION_FIELDS.keys())
+
 # Posibles valores campos
 VALORACION_SI_ANONIMA = True
 VALORACION_NO_ANONIMA = False
@@ -195,21 +167,12 @@ VALORACION_NO_ANONIMA = False
 
 REACCIONES = "Reacciones"
 
-REACCION_ID = "Reaccion_id"
-REACCION_ID_PROFESOR = "Profesor_id"
-REACCION_ID_ALUMNO = "Alumno_id"
-REACCION_ID_ASIGNATURA = "Asignatura_id"
-REACCION_EMOJI = "Emoji"
-REACCION_CANTIDAD = "Cantidad"
-
-REACCION_CAMPOS_VALIDOS = {
-    "REACCION_ID",
-    "REACCION_ID_PROFESOR",
-    "REACCION_ID_ALUMNO",
-    "REACCION_ID_ASIGNATURA",
-    "REACCION_EMOJI",
-    "REACCION_CANTIDAD",
-}
+REACCION_ID = "reaccion_id"
+REACCION_ID_PROFESOR = "profesor_id"
+REACCION_ID_ALUMNO = "alumno_id"
+REACCION_ID_ASIGNATURA = "asignatura_id"
+REACCION_EMOJI = "emoji"
+REACCION_CANTIDAD = "cantidad"
 
 REACCION_FIELDS = {                                   
     "REACCION_ID":REACCION_ID,
@@ -220,6 +183,8 @@ REACCION_FIELDS = {
     "REACCION_CANTIDAD":REACCION_CANTIDAD,
 }
 
+REACCION_CAMPOS_VALIDOS = set(REACCION_FIELDS.keys())
+
 
 
 ##=====================
@@ -229,26 +194,14 @@ REACCION_FIELDS = {
 
 MENSAJES = "Mensajes"
 
-MENSAJE_ID = "Mensaje_id"
-MENSAJE_ID_TELEGRAM = "Telegram_id"
-MENSAJE_ID_CHAT = "Chat_id"
-MENSAJE_ID_SENDER = "Sender_id"
-MENSAJE_ID_PROFESOR = "Profesor_id"
-MENSAJE_ID_ASIGNATURA = "Asignatura_id"
-MENSAJE_TEXTO = "Texto"
-MENSAJE_FECHA = "Fecha"
-
-
-MENSAJE_CAMPOS_VALIDOS = {
-    "MENSAJE_ID",
-    "MENSAJE_ID_TELEGRAM",
-    "MENSAJE_ID_CHAT",
-    "MENSAJE_ID_SENDER",
-    "MENSAJE_ID_PROFESOR",
-    "MENSAJE_ID_ASIGNATURA",
-    "MENSAJE_TEXTO",
-    "MENSAJE_FECHA",
-}
+MENSAJE_ID = "mensaje_id"
+MENSAJE_ID_TELEGRAM = "telegram_id"
+MENSAJE_ID_CHAT = "chat_id"
+MENSAJE_ID_SENDER = "sender_id"
+MENSAJE_ID_PROFESOR = "profesor_id"
+MENSAJE_ID_ASIGNATURA = "asignatura_id"
+MENSAJE_TEXTO = "texto"
+MENSAJE_FECHA = "fecha"
 
 MENSAJE_FIELDS = {
     "MENSAJE_ID": MENSAJE_ID,
@@ -260,5 +213,8 @@ MENSAJE_FIELDS = {
     "MENSAJE_TEXTO": MENSAJE_TEXTO,
     "MENSAJE_FECHA": MENSAJE_FECHA,
 }
+
+MENSAJE_CAMPOS_VALIDOS = set(MENSAJE_FIELDS.keys())
+
 
 

@@ -9,7 +9,6 @@ from telebot import types
 from utils.state_manager import estados_timestamp, clear_state
 
 # Importar funciones de la base de datos compartidas
-from db.queries import (get_usuarios)
 from db.constantes import *
 
 # Constantes
@@ -51,12 +50,6 @@ def menu_estudiante():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True)
     markup.row(types.KeyboardButton("❌ Terminar Tutoria"))
     return markup
-
-# Funciones de verificación y estado
-def es_profesor(user_id):
-    """Verifica si el usuario es un profesor"""
-    user = get_usuarios(USUARIO_ID_TELEGRAM=user_id)
-    return (user and user[0][USUARIO_TIPO] == USUARIO_TIPO_PROFESOR)
 
 def limpiar_estados_obsoletos():
     """Limpia estados de usuario obsoletos para evitar fugas de memoria."""

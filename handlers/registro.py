@@ -22,7 +22,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Importar módulos necesarios
-from db.queries import (get_usuarios, update_usuario)
+from db.queries import (create_usuario, get_usuarios, get_usuarios_local, update_usuario)
 from db.constantes import *
 # Añadir al inicio del archivo
 from utils.state_manager import *
@@ -125,23 +125,19 @@ def register_handlers(bot):
 
     def is_valid_email(email):
         """Verifica si el correo es válido (institucional UGR)"""
-        #return re.match(r'.+@(correo\.)?ugr\.es$', email) is not None
-        return re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', email) is not None
+        return re.match(r'^[a-zA-Z0-9._%+-]+@(correo\.)?ugr\.es$', email) is not None
         
     @bot.message_handler(commands=[COMMAND_START])
     def handle_start(message):
-        """Inicia el proceso de registro simplificado"""
+        """Inicia el proceso de registro"""
         chat_id = message.chat.id
 
-        setup_commands(chat_id)
+        user = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)
 
-        user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)
-
-        print(user)
-
-        # Verifica si el usuario ya está registrado
+        # Verifica si el usuario ya está registrado y si lo esta comprueba si es estudiante o profesor
         if user and user != []:
-            bot.send_message(chat_id, "Ya estás registrado. Puedes usar las funcionalidades disponibles.")
+            setup_commands(chat_id, user[0][USUARIO_TIPO])
+            bot.send_message(chat_id, "Ya estás registrado. Comandos reconfigurados.")
             clear_state(chat_id)
             return
 
@@ -158,7 +154,6 @@ def register_handlers(bot):
             parse_mode="Markdown"
         )
         set_state(chat_id, STATE_EMAIL)
-        user_data[chat_id] = {}  # Reinicia los datos del usuario
 
     @bot.message_handler(func=lambda message: get_state(message.chat.id) == STATE_EMAIL)
     def handle_email(message):
@@ -194,11 +189,10 @@ def register_handlers(bot):
                 "Por favor, introduce un correo válido:"
             )
             return
-        
+                
+        # 2. Verificar si el correo existe en moodle
         user = get_usuarios(USUARIO_EMAIL=email)
-        
-        # 2. Verificar si el correo existe en la tabla Usuarios
-        if user is None:
+        if not user or user == []:
             bot.send_message(
                 chat_id, 
                 "❌ *Correo no encontrado*\n\n"
@@ -207,16 +201,8 @@ def register_handlers(bot):
                 parse_mode="Markdown"
             )
             return
-
-        # 3. Verificar si el correo ya está registrado con un Telegram ID
-        if user[0][USUARIO_ID_TELEGRAM] is not None:
-            bot.send_message(
-                chat_id, 
-                "⚠️ Este correo ya está registrado. Si ya tienes cuenta, usa los comandos disponibles.\n"
-                "Si necesitas ayuda, contacta con soporte."
-            )
-            clear_state(chat_id)
-            return
+        
+        user_data[chat_id] = user[0]
         
         # Guardar el email
         user_data[chat_id][USUARIO_EMAIL] = email
@@ -317,15 +303,20 @@ def register_handlers(bot):
             try:
                 # Obtener el correo asociado con este chat_id
                 email = user_data[chat_id][USUARIO_EMAIL]
-                tipo_usuario = user_data[chat_id].get(USUARIO_TIPO, USUARIO_TIPO_ESTUDIANTE)
+                tipo_usuario = None
                 
                 if email:
-                    # Actualizar la base de datos: cambiar Registrado a SI y guardar el TelegramID
-                    user = get_usuarios(USUARIO_EMAIL=email)[0]  # Verificar que el email existe
-                    update_usuario(user[USUARIO_ID], USUARIO_ID_TELEGRAM=message.from_user.id)
-                    logger.info(f"Usuario {email} verificado correctamente. TelegramID actualizado.")
+                    if re.fullmatch(r'^[a-zA-Z0-9._%+-]+@ugr\.es$', email):
+                        tipo_usuario = USUARIO_TIPO_PROFESOR
+                    elif re.fullmatch(r'^[a-zA-Z0-9._%+-]+@correo\.ugr\.es$', email):
+                        tipo_usuario = USUARIO_TIPO_ESTUDIANTE
+                    
+                    if user_data[chat_id][USUARIO_ID_TELEGRAM]:
+                        update_usuario(user_data[chat_id][USUARIO_ID], USUARIO_ID_TELEGRAM=chat_id)
+                    else:
+                        create_usuario(user_data[chat_id][USUARIO_ID_MOODLE], message.from_user.id, tipo_usuario)
 
-                    setup_commands(chat_id)
+                    setup_commands(chat_id, tipo_usuario)
                     
                     # Enviar mensaje de bienvenida
                     handle_registration_completion(chat_id, tipo_usuario)
@@ -379,12 +370,11 @@ def register_handlers(bot):
         bot.answer_callback_query(call.id, "✅ Registro completado")
 
 
-    def setup_commands(chat_id = ""):
+    def setup_commands(chat_id, tipo):
         """Configura los comandos que aparecen en el menú del bot"""
         try:
             bot.delete_my_commands(scope=telebot.types.BotCommandScopeChat(chat_id))
-            user = get_usuarios(USUARIO_ID_TELEGRAM=chat_id)
-            if user and user[0][USUARIO_TIPO] == USUARIO_TIPO_ESTUDIANTE:
+            if tipo == USUARIO_TIPO_ESTUDIANTE:
                 bot.set_my_commands([
                     telebot.types.BotCommand(f"/{COMMAND_START}", "Inicia el bot, el registro y actualiza el menu de comandos"),
                     telebot.types.BotCommand(f"/{COMMAND_HELP}", "Muestra la ayuda del bot"),
@@ -393,7 +383,7 @@ def register_handlers(bot):
                     telebot.types.BotCommand(f"/{COMMAND_VER_MIS_DATOS}", "Ver tus datos registrados"),
                     telebot.types.BotCommand(f"/{COMMAND_VER_REACCIONES}", "Ver reacciones recibidas")
                 ], scope=telebot.types.BotCommandScopeChat(chat_id))
-            elif user and user[0][USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
+            elif tipo == USUARIO_TIPO_PROFESOR:
                 bot.set_my_commands([
                     telebot.types.BotCommand(f"/{COMMAND_START}", "Inicia el bot, el registro y actualiza el menu de comandos"),
                     telebot.types.BotCommand(f"/{COMMAND_HELP}", "Muestra la ayuda del bot"),
