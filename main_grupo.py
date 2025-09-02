@@ -4,7 +4,6 @@ Inicialización, configuración y handlers básicos.
 """
 import telebot
 import threading
-import os
 import sys
 import logging
 from telebot import types
@@ -132,7 +131,7 @@ def send_welcome(message):
             # Es estudiante
             bot.send_message(
                 chat_id,
-                "¡Hola! Para unirte a una tutoría, necesitas el enlace de invitación de tu profesor.",
+                "¡Hola! Para unirte a una tutoría, necesitas recibir el enlace de invitación de tu profesor a traves del bot principal.",
                 reply_markup=menu_estudiante()
             )
     

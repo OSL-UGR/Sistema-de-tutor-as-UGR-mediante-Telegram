@@ -2,3 +2,4 @@
 __pycache__
 datos.env
 logs/*.log
+db/test-db.sql

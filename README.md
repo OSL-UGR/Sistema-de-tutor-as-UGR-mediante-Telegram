@@ -45,7 +45,7 @@
 ### Iniciar bot de registro
 
 ```bash
-python main
+python main.py
 ```
 
 Envía `/start` en Telegram para comenzar el alta.
@@ -53,18 +53,10 @@ Envía `/start` en Telegram para comenzar el alta.
 ### Iniciar bot de grupos
 
 ```bash
-python main_grupo
+python main_grupo.py
 ```
 
 Agregar el bot como admin en un grupo para habilitar la configuración.
-
-**Comandos principales**:
-
-* `/start`
-* `/tutoria`
-* `/configurar_horario`
-* `/crear_grupo_tutoria`
-* `/ver_misdatos`
 
 ---
 

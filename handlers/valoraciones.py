@@ -367,7 +367,7 @@ def register_handlers(bot):
             )
         
     @bot.callback_query_handler(func=lambda call: call.data.startswith(VER_COMENTARIOS))
-    def handle_ver_no_anonimas(call):
+    def handle_ver_comentarios(call):
         chat_id = call.message.chat.id
         user = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0]
         valoraciones = get_valoraciones(VALORACION_ID_PROFESOR=user[USUARIO_ID])

@@ -1,8 +1,6 @@
-import datetime
 import os
 import sys
 
-from handlers_grupo.tutorias import COMMAND_FINALIZAR
 from handlers_grupo.utils import configurar_logger
 from utils.state_manager import *
 from db.queries import delete_reaccion, get_grupos_tutoria, get_mensajes, get_reacciones, get_usuarios_local, insert_mensaje, insert_reaccion, update_reaccion

@@ -57,7 +57,7 @@ def register_handlers(bot):
                             texto += "\n"
                         last_alumno = reaccion[REACCION_ID_ALUMNO]
                         
-                        matricula = next((item for item in matriculas if (item[MATRICULA_ID_USUARIO] == reaccion[REACCION_ID_PROFESOR])),None)
+                        matricula = next((item for item in matriculas if (item[MATRICULA_ID_USUARIO] == reaccion[REACCION_ID_ALUMNO])),None)
                         if matricula:
                             texto += f"    👤 Alumno: {matricula[MATRICULA_USUARIO_NOMBRE]} {matricula[MATRICULA_USUARIO_APELLIDOS]}\n"
                     texto += f"        • {reaccion[REACCION_EMOJI]} - {reaccion[REACCION_CANTIDAD]}\n"
@@ -94,7 +94,7 @@ def register_handlers(bot):
                             texto += "\n"
                         last_profesor = reaccion[REACCION_ID_PROFESOR]
                         
-                        matricula = next((item for item in matriculas if (item[MATRICULA_ID_USUARIO] == reaccion[REACCION_ID_ALUMNO])), None)
+                        matricula = next((item for item in matriculas if (item[MATRICULA_ID_USUARIO] == reaccion[REACCION_ID_PROFESOR])), None)
                         if matricula:
                             texto += f"    👤 Profesor: {matricula[MATRICULA_USUARIO_NOMBRE]} {matricula[MATRICULA_USUARIO_APELLIDOS]}\n"
                     texto += f"        • {reaccion[REACCION_EMOJI]} - {reaccion[REACCION_CANTIDAD]}\n"
@@ -198,9 +198,9 @@ def register_handlers(bot):
                 "Nombre": "No registrado",
                 "Texto": mensaje[MENSAJE_TEXTO],
             }
-            matricula = next(item for item in matriculas 
-                            if (int(item[MATRICULA_ID_USUARIO]) == mensaje[MENSAJE_ID_SENDER] 
-                            and int(item[MATRICULA_ID_ASIGNATURA]) == mensaje[MENSAJE_ID_ASIGNATURA]))
+
+            matricula = next(item for item in matriculas if (int(item[MATRICULA_ID_USUARIO]) == mensaje[MENSAJE_ID_SENDER]))
+
             if matricula:
                 mensajes_dict[mensaje[MENSAJE_ID_CHAT]][f"M_{mensaje[MENSAJE_ID_TELEGRAM]}"]["Nombre"] = f"{matricula[MATRICULA_USUARIO_NOMBRE]} {matricula[MATRICULA_USUARIO_APELLIDOS]}"
         try:

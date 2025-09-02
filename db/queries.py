@@ -216,8 +216,8 @@ def get_usuarios_by_multiple_ids(usuarios_ids):
         # Paso 2: Consultar Moodle para los emails obtenidos
         results = []
         for i, id in enumerate(ids_moodle):
-            # Moodle no permite múltiples criteria a la vez con la misma clave,
-            # así que usamos múltiples peticiones o agrupamos en OR (si se soportara).
+            # Moodle no permite múltiples criteria a la vez con la misma clave para usuarios,
+            # así que usamos múltiples peticiones (muy lento).
             payload = {
                 'wstoken': MOODLE_TOKEN,
                 'wsfunction': 'core_user_get_users',
@@ -562,7 +562,6 @@ def get_matriculas_asignatura_de_usuario(**kwargs):
                     MATRICULA_USUARIO_APELLIDOS: user.get("lastname", "Desconocido"),
                     MATRICULA_USUARIO_EMAIL: user.get("email", "No especificado"),
                 })
-        print(results)
         return results
 
     except Exception as e:

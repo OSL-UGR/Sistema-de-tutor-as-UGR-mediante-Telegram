@@ -73,22 +73,21 @@ def handle_ver_misdatos(message):
     user = user[0]
     print(f"✅ Usuario encontrado: {user[USUARIO_NOMBRE]} ({user[USUARIO_TIPO]})")
     
-    # Convertir el objeto sqlite3.Row a diccionario
     user_dict = dict(user)
     
     # Obtener matrículas del usuario
     matriculas = get_matriculas_asignatura_de_usuario(MATRICULA_ID_USUARIO=user[USUARIO_ID])
     
     user_info = (
-        f"👤 *Datos de usuario:*\n\n"
-        f"*Nombre:* {user[USUARIO_NOMBRE]} {user[USUARIO_APELLIDOS]}\n"
-        f"*Correo:* {user[USUARIO_EMAIL] or 'No registrado'}\n"
-        f"*Tipo:* {user[USUARIO_TIPO].capitalize()}\n"
+        f"👤 Datos de usuario:\n\n"
+        f"Nombre: {user[USUARIO_NOMBRE]} {user[USUARIO_APELLIDOS]}\n"
+        f"Correo: {user[USUARIO_EMAIL] or 'No registrado'}\n"
+        f"Tipo: {user[USUARIO_TIPO].capitalize()}\n"
     )
         
     # Añadir información de matrículas
     if matriculas and len(matriculas) > 0:
-        user_info += "*Asignaturas matriculadas:*\n"
+        user_info += "Asignaturas matriculadas:\n"
         
         # Agrupar asignaturas por carrera
         for m in matriculas:
@@ -102,7 +101,7 @@ def handle_ver_misdatos(message):
     # Añadir horario si es profesor
     if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
         if USUARIO_HORARIO in user_dict and user_dict[USUARIO_HORARIO]:
-            user_info += f"\n*Horario de tutorías:*"
+            user_info += f"\nHorario de tutorías:"
             
             dias = user_dict[USUARIO_HORARIO].split(', ')
             
@@ -125,26 +124,26 @@ def handle_ver_misdatos(message):
                 if grupo[GRUPO_ID_ASIGNATURA] == None:
                     grupo[GRUPO_ID_ASIGNATURA] = 0
             grupos.sort(key=lambda x: x[GRUPO_ID_ASIGNATURA])
-            user_info += "\n*🔵 Grupos de tutoría creados:*\n"
+            user_info += "\n🔵 Grupos de tutoría creados:\n"
             
             for grupo in grupos:
                 # Formato de fecha más amigable
                 fecha = str(grupo[GRUPO_FECHA]).split(' ')[0] if grupo[GRUPO_FECHA] else 'Desconocida'
                 enlace = grupo[GRUPO_ENLACE] if grupo[GRUPO_ENLACE] else 'Sin enlace'
                 
-                user_info += f"• *{grupo[GRUPO_NOMBRE]}*\n"
+                user_info += f"• {grupo[GRUPO_NOMBRE]}\n"
                 user_info += f"  📅 Creada: {fecha}\n"
                 user_info += f"  🔗 Enlace: {enlace}\n\n"
 
         else:
             user_info += "\n*🔵 No has creado grupos de tutoría todavía.*\n"
             user_info += "Usa /crear_ grupo _ tutoria para crear una nueva grupo.\n"
-    
     # Intentar enviar el mensaje con formato Markdown
     try:
-        bot.send_message(chat_id, user_info, parse_mode="Markdown")
+        bot.send_message(chat_id, user_info, parse_mode=None)
         
         # Si es profesor y tiene grupos, mostrar botones para editar
+        print("test")
         if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR and grupos and len(grupos) > 0:
             markup = types.InlineKeyboardMarkup(row_width=1)
             
@@ -156,7 +155,6 @@ def handle_ver_misdatos(message):
                     f"✏️ grupo: {grupo[GRUPO_NOMBRE]}",
                     callback_data=f"{EDIT_GRUPO}{grupo_id}"
                 ))
-            
             bot.send_message(
                 chat_id,
                 "Selecciona una grupo para gestionar:",
@@ -165,7 +163,6 @@ def handle_ver_misdatos(message):
     except Exception as e:
         # Si falla por problemas de formato, enviar sin formato
         print(f"Error al enviar datos de usuario: {e}")
-        bot.send_message(chat_id, user_info.replace('*', ''), parse_mode=None)
 
 # Importar y configurar los handlers desde los módulos
 from handlers.registro import register_handlers as register_registro_handlers
