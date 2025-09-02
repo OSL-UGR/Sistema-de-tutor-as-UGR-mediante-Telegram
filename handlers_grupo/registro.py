@@ -164,8 +164,6 @@ def register_handlers(bot):
             profesor = get_usuarios(USUARIO_ID_TELEGRAM=str(user_id))[0]
             id_usuario_profesor = profesor[USUARIO_ID]
 
-            # Cerrar la conexión temporal
-
             # Crear enlace de invitación si es posible
             try:
                 enlace_invitacion = bot.create_chat_invite_link(chat_id).invite_link
