@@ -37,7 +37,7 @@ def register_handlers(bot):
             grupo_id = int(call.data.split("_")[2])
             print(f"🔍 grupo ID a editar: {grupo_id}")
 
-            # Verificar que el usuario es el propietario de la grupo
+            # Verificar que el usuario es el propietario de el grupo
             user = get_usuarios_local(USUARIO_ID_TELEGRAM=call.from_user.id)[0]
 
             if not user or user[USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
@@ -45,13 +45,13 @@ def register_handlers(bot):
                 bot.answer_callback_query(call.id, "⚠️ Solo los profesores propietarios pueden editar grupos")
                 return
 
-            # Obtener datos actuales de la grupo
+            # Obtener datos actuales de el grupo
             print(f"🔍 Consultando detalles de grupo ID {grupo_id}")
             grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_PROFESOR=user[USUARIO_ID])[0]
 
             if not grupo:
                 print(f"❌ grupo no encontrada o no pertenece al usuario")
-                bot.answer_callback_query(call.id, "❌ No se encontró la grupo o no tienes permisos")
+                bot.answer_callback_query(call.id, "❌ No se encontró el grupo o no tienes permisos")
                 return
 
             print(f"✅ grupo encontrada: {grupo[GRUPO_NOMBRE]} (Chat ID: {grupo[GRUPO_ID_CHAT]})")
@@ -60,7 +60,7 @@ def register_handlers(bot):
             print("🔘 Generando botón de eliminación...")
             markup = types.InlineKeyboardMarkup(row_width=1)
 
-            # Añadir opción para eliminar la grupo
+            # Añadir opción para eliminar el grupo
             markup.add(types.InlineKeyboardButton(
                 "🗑️ Eliminar grupo",
                 callback_data=f"{ELIMINAR_GRUPO}{grupo_id}"
@@ -139,7 +139,7 @@ def register_handlers(bot):
             grupo_id = int(call.data.split("_")[2])
             print(f"🔍 grupo ID a eliminar: {grupo_id}")
 
-            # Verificar que el usuario es el propietario de la grupo
+            # Verificar que el usuario es el propietario de el grupo
             user = get_usuarios_local(USUARIO_ID_TELEGRAM=call.from_user.id)[0]
 
             if not user or user[USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
@@ -147,12 +147,12 @@ def register_handlers(bot):
                 bot.answer_callback_query(call.id, "⚠️ Solo los profesores propietarios pueden eliminar grupos")
                 return
 
-            # Obtener datos de la grupo
+            # Obtener datos de el grupo
             grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_PROFESOR=user[USUARIO_ID])[0]
 
             if not grupo:
                 print(f"❌ grupo no encontrada o no pertenece al usuario")
-                bot.answer_callback_query(call.id, "❌ No se encontró la grupo o no tienes permisos")
+                bot.answer_callback_query(call.id, "❌ No se encontró el grupo o no tienes permisos")
                 return
 
             print(f"✅ grupo encontrada: {grupo[GRUPO_NOMBRE]} (Chat ID: {grupo[GRUPO_ID_CHAT]})")
@@ -196,7 +196,7 @@ def register_handlers(bot):
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith(CONFIRMAR_ELIMINAR))
     def handle_confirmar_eliminar(call):
-        """Confirma y ejecuta la eliminación de la grupo"""
+        """Confirma y ejecuta la eliminación de el grupo"""
         chat_id = call.message.chat.id
         print(f"\n\n### INICIO CONFIRMAR_ELIMINAR - Callback: {call.data} ###")
 
@@ -204,7 +204,7 @@ def register_handlers(bot):
             grupo_id = int(call.data.split("_")[2])
             print(f"🔍 grupo ID a eliminar definitivamente: {grupo_id}")
 
-            # Verificar que el usuario es el propietario de la grupo
+            # Verificar que el usuario es el propietario de el grupo
             user = get_usuarios_local(USUARIO_ID_TELEGRAM=call.from_user.id)[0]
 
             if not user or user[USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
@@ -212,19 +212,19 @@ def register_handlers(bot):
                 bot.answer_callback_query(call.id, "⚠️ Solo los profesores propietarios pueden eliminar grupos")
                 return
 
-            # Obtener datos de la grupo
+            # Obtener datos de el grupo
             grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_PROFESOR=user[USUARIO_ID])[0]
 
             if not grupo:
                 print(f"❌ grupo no encontrada o no pertenece al usuario")
-                bot.answer_callback_query(call.id, "❌ No se encontró la grupo o no tienes permisos")
+                bot.answer_callback_query(call.id, "❌ No se encontró el grupo o no tienes permisos")
                 return
 
             nombre_grupo = grupo[GRUPO_NOMBRE]
             telegram_chat_id = grupo[GRUPO_ID_CHAT]
             print(f"✅ Ejecutando eliminación de grupo: {nombre_grupo} (ID: {grupo_id}, Chat ID: {telegram_chat_id})")
 
-            # 1. Eliminar la grupo de la base de datos
+            # 1. Eliminar el grupo de la base de datos
             print("2️⃣ Eliminando registro de grupo...")
             delete_grupo_tutoria(grupo_id)
             print(f"  ✓ grupo eliminada de la BD")
@@ -249,7 +249,7 @@ def register_handlers(bot):
             import traceback
             print(traceback.format_exc())
             bot.edit_message_text(
-                "❌ Ha ocurrido un error al intentar eliminar la grupo. Por favor, inténtalo de nuevo.",
+                "❌ Ha ocurrido un error al intentar eliminar el grupo. Por favor, inténtalo de nuevo.",
                 chat_id=chat_id,
                 message_id=call.message.message_id
             )
@@ -364,18 +364,8 @@ def register_handlers(bot):
 
             "3️⃣ Configurar el grupo\n"
             "• En el grupo, escriba /configurar_grupo\n"
-            "• Siga las instrucciones para vincular la grupo\n"
+            "• Siga las instrucciones para vincular el grupo\n"
             "• Configure el tipo de tutoría\n\n"
-
-            "📌 Recomendaciones para el nombre del grupo\n"
-            "• 'Tutorías [Asignatura] - [Su Nombre]'\n"
-            "• 'Avisos [Asignatura] - [Año Académico]'\n\n"
-
-            "🔔 Una vez registrada la grupo podrá\n"
-            "• Gestionar solicitudes de tutoría\n"
-            "• Programar sesiones grupales\n"
-            "• Enviar avisos automáticos\n"
-            "• Ver estadísticas de participación"
         )
 
         # Crear botones útiles con callback data simplificados
@@ -481,10 +471,10 @@ def register_handlers(bot):
             "Depende del tipo: los de avisos acceden todos los matriculados en la asignatura, los de tutoría individual requieren aprobación por parte del profeser siempre y cuando se encuentre en horario de tutorias.\n\n"
 
             "¿Puedo cambiar el tipo de grupo después?\n"
-            "Sí, use /ver_misdatos y seleccione la grupo para modificar su propósito.\n\n"
+            "Sí, use /ver_misdatos y seleccione el grupo para modificar su propósito.\n\n"
 
             "¿Cómo eliminar un grupo?\n"
-            "Use /ver_misdatos, seleccione la grupo y elija la opción de eliminar.\n\n"
+            "Use /ver_misdatos, seleccione el grupo y elija la opción de eliminar.\n\n"
 
             "¿Los estudiantes pueden crear grupos?\n"
             "No, solo los profesores pueden crear grupos de tutoría oficiales."
