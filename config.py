@@ -4,30 +4,29 @@ from dotenv import load_dotenv
 
 # Obtener ruta absoluta al directorio del proyecto
 BASE_DIR = pathlib.Path(__file__).parent.absolute()
-ENV_PATH = BASE_DIR / "datos.env.txt"
-EXCEL_PATH = BASE_DIR / "data" / "usuarios.xlsx"
+ENV_PATH = BASE_DIR / "datos.env"
 
 # Cargar variables de entorno
 print(f"Cargando configuración desde: {ENV_PATH}")
 load_dotenv(dotenv_path=ENV_PATH)
 
-# Ruta a la base de datos
-DB_PATH = BASE_DIR / "tutoria_ugr.db"
+# Acceso a la base de datos
+DB_USER = os.getenv("DB_USER", "TU_DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "TU_DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST", "TU_DB_HOST")
+DB_NAME = os.getenv("DB_NAME", "TU_DB_NAME")
+
+MOODLE_USER = os.getenv("MOODLE_USER", "MOODLE_USER")
+MOODLE_PASSWORD = os.getenv("MOODLE_PASSWORD", "MOODLE_PASSWORD")
+MOODLE_TOKEN = os.getenv("MOODLE_TOKEN", "MOODLE_TOKEN")
+MOODLE_ADDRESS = os.getenv("MOODLE_ADDRESS", "MOODLE_ADDRESS")
 
 # Configuración del bot
-TOKEN = os.getenv("BOT_TOKEN", "TU_TOKEN_AQUI")
-GRUPO_BOT_TOKEN = "tu_token_del_bot_para_grupos_aquí"
+BOT_TOKEN = os.getenv("BOT_TOKEN", "TU_TOKEN_AQUI")
+BOT_TOKEN_GRUPO = os.getenv("BOT_TOKEN_GRUPO", "tu_token_del_bot_para_grupos_aquí")
+BOT_GRUPO_NOMBRE = os.getenv("BOT_GRUPO_NOMBRE", "nombre_bot")
 
 # Configuración de email
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-
-# Mapping de áreas y carreras
-AREA_CARRERAS = {
-    "Ciencias": ["Biología", "Química", "Física", "Matemáticas", "Geología"],
-    "Ciencias Sociales y Jurídicas": ["Derecho", "Economía", "Psicología", "Magisterio", "Trabajo Social"],
-    "Ciencias de la Salud": ["Medicina", "Enfermería", "Farmacia", "Fisioterapia", "Odontología"],
-    "Artes y Humanidades": ["Historia", "Filosofía", "Lenguas Modernas", "Traducción e Interpretación", "Historia del Arte"],
-    "Ingeniería y Arquitectura": ["Ingeniería Informática", "Ingeniería de Telecomunicaciones", "Arquitectura", "Ingeniería Civil", "Ingeniería Eléctrica"],
-}

@@ -1,698 +1,779 @@
-import sqlite3
-from pathlib import Path
-import sys
-import os
+from collections import defaultdict
+import requests
 import logging
+from config import MOODLE_ADDRESS, MOODLE_TOKEN
+from db import get_cursor, commit, rollback
+from db.constantes import *
 
 # Configurar logger
 logger = logging.getLogger(__name__)
 
-# Añadir directorio padre al path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+##=====================
+## ===== Usuarios =====
+##=====================
 
-# Ruta a la base de datos
-DB_PATH = Path(__file__).parent.parent / "tutoria_ugr.db"
-
-def get_db_connection():
-    """Obtiene una conexión a la base de datos"""
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-# ===== FUNCIONES DE USUARIO =====
-def get_user_by_telegram_id(telegram_id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Consulta con JOIN para incluir el horario
-    cursor.execute("""
-        SELECT u.*, hp.dia || ' de ' || hp.hora_inicio || ' a ' || hp.hora_fin AS Horario 
-        FROM Usuarios u 
-        LEFT JOIN Horarios_Profesores hp ON u.Id_usuario = hp.Id_usuario
-        WHERE u.TelegramID = ?
-    """, (telegram_id,))
-    
-    result = cursor.fetchone()
-    conn.close()
-    return result
-
-def get_user_by_id(user_id):
-    """Busca un usuario por su ID en la base de datos"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT * FROM Usuarios WHERE Id_usuario = ?", (user_id,))
-    user = cursor.fetchone()
-    
-    conn.close()
-    return dict(user) if user else None
-
-def buscar_usuario_por_email(email):
-    """Busca un usuario por su email"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT * FROM Usuarios WHERE Email_UGR = ?", (email,))
-    user = cursor.fetchone()
-    
-    conn.close()
-    return dict(user) if user else None
-
-def create_user(nombre, tipo, email, telegram_id=None, apellidos=None, dni=None, carrera=None, Area=None, registrado="NO"):
+def create_usuario(moodle_id, telegram_id, tipo, do_commit=True):
     """Crea un nuevo usuario en la base de datos con los datos proporcionados"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_cursor()
     
     try:
         cursor.execute(
-            """INSERT INTO Usuarios 
-            (Nombre, Tipo, Email_UGR, TelegramID, Apellidos, DNI, Carrera, Area, Registrado) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (nombre, tipo, email, telegram_id, apellidos, dni, carrera, Area, registrado)
+            f"""INSERT INTO {USUARIOS} 
+            ({USUARIO_ID_MOODLE}, {USUARIO_ID_TELEGRAM}, {USUARIO_TIPO}) 
+            VALUES ({PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER})""",
+            (moodle_id, telegram_id, tipo)
         )
-        conn.commit()
+        if do_commit:
+            commit()
         return cursor.lastrowid
     except Exception as e:
         print(f"Error al crear usuario: {e}")
-        conn.rollback()
+        rollback()
         return None
-    finally:
-        conn.close()
-
-def update_user(user_id, **kwargs):
-    """Actualiza los datos de un usuario existente"""
-    if not kwargs:
-        return False
     
+def update_usuario(user_id, do_commit=True, **kwargs):
+    """Actualiza únicamente los campos locales Email_UGR y TelegramID de un usuario, identificándolo por Usuario_id."""
+    CAMPOS_EDITABLES = {"USUARIO_ID_TELEGRAM", "USUARIO_HORARIO" }
+
+    # Validación estricta: solo campos permitidos
+    if not all(k in CAMPOS_EDITABLES for k in kwargs):
+        raise ValueError("Solo se pueden actualizar Horario y TelegramID")
+
     try:
-        # Construir la consulta dinámicamente
-        query = "UPDATE Usuarios SET "
-        query += ", ".join([f"{key} = ?" for key in kwargs.keys()])
-        query += " WHERE Id_usuario = ?"
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
+        if not kwargs:
+            return False  # Nada que actualizar
+
+        query = f"UPDATE {USUARIOS} SET "
+        query += ", ".join([f"{USUARIO_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
+        query += f" WHERE {USUARIO_ID} = {PLACEHOLDER}"
+
+        cursor = get_cursor()
         cursor.execute(query, list(kwargs.values()) + [user_id])
-        conn.commit()
-        success = cursor.rowcount > 0
-        conn.close()
-        return success
+
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+
     except Exception as e:
-        import logging
         logging.getLogger('db.queries').error(f"Error al actualizar usuario: {e}")
+        rollback()
         return False
 
-def update_horario_profesor(user_id, horario):
-    """
-    Actualiza el horario de un profesor en la tabla Usuarios
-    
-    Args:
-        user_id: ID del usuario (profesor)
-        horario: Horario en formato string
-        
-    Returns:
-        bool: True si se actualizó correctamente, False en caso contrario
-    """
+def delete_usuario(user_id):
+    cursor = get_cursor()
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Actualizar directamente en la tabla Usuarios
-        cursor.execute(
-            "UPDATE Usuarios SET Horario = ? WHERE Id_usuario = ?",
-            (horario, user_id)
-        )
-        
-        conn.commit()
-        conn.close()
-        return True
+        cursor.execute(f"DELETE FROM {USUARIOS} WHERE {USUARIO_ID} = {PLACEHOLDER}", (user_id,))
+        commit()
     except Exception as e:
-        import logging
-        logger = logging.getLogger('db.queries')
-        logger.error(f"Error al actualizar horario de profesor: {e}")
-        return False
+        print(f"Error al eliminar usuario: {e}")
+        rollback()
 
-# ===== FUNCIONES DE MATRÍCULA =====
-def crear_matricula(user_id, asignatura_id, tipo_usuario=None, curso="Actual"):
-    """
-    Crea o actualiza una matrícula para un usuario en una asignatura
-    
-    Args:
-        user_id: ID del usuario
-        asignatura_id: ID de la asignatura
-        tipo_usuario: Tipo de usuario para esta matrícula (opcional)
-        curso: Curso académico (opcional)
-        
-    Returns:
-        int: ID de la matrícula creada, o None si hubo error
-    """
+def get_usuarios(**kwargs):
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Verificar si ya existe la matrícula
-        cursor.execute(
-            "SELECT * FROM Matriculas WHERE Id_usuario = ? AND Id_asignatura = ?", 
-            (user_id, asignatura_id)
-        )
-        existe = cursor.fetchone()
-        
-        if not existe:
-            # Si no se proporciona tipo, obtenerlo del usuario
-            if tipo_usuario is None:
-                cursor.execute("SELECT Tipo FROM Usuarios WHERE Id_usuario = ?", (user_id,))
-                user = cursor.fetchone()
-                if user:
-                    tipo_usuario = user[0]
+        if not all(k in USUARIO_CAMPOS_VALIDOS for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Usuarios")
+
+        cursor = get_cursor()
+
+        # Caso 1: Se filtra por TelegramID
+        if "USUARIO_ID" in kwargs or "USUARIO_ID_TELEGRAM" in kwargs:
+            field = "USUARIO_ID" if "USUARIO_ID" in kwargs else "USUARIO_ID_TELEGRAM"
+            query = f"SELECT * FROM {USUARIOS} WHERE {USUARIO_FIELDS[field]} = {PLACEHOLDER}"
+            cursor.execute(query, (kwargs[field],))
+            row = cursor.fetchone()
+            if row is None:
+                return []
             
-            # Crear matrícula con el tipo obtenido
-            cursor.execute(
-                "INSERT INTO Matriculas (Id_usuario, Id_asignatura, Tipo, Curso) VALUES (?, ?, ?, ?)",
-                (user_id, asignatura_id, tipo_usuario, curso)
-            )
-            matricula_id = cursor.lastrowid
-            conn.commit()
+            usuario_id = row[USUARIO_ID]
+            moodle_id = row[USUARIO_ID_MOODLE]
+            telegram_id = row[USUARIO_ID_TELEGRAM]
+            tipo = row[USUARIO_TIPO]
+            horario = row[USUARIO_HORARIO] if USUARIO_HORARIO in row else None
+
+            # Llamada a Moodle por email
+            payload = {
+                'wstoken': MOODLE_TOKEN,
+                'wsfunction': 'core_user_get_users',
+                'moodlewsrestformat': 'json',
+                'criteria[0][key]': 'id',
+                'criteria[0][value]': moodle_id,
+            }
+            url = f"{MOODLE_ADDRESS}/webservice/rest/server.php"
+            response = requests.post(url, params=payload)
+
+            if response.ok:
+                users = response.json().get("users", [])
+                result = []
+                for user in users:
+                    result.append({
+                        USUARIO_ID: usuario_id,
+                        USUARIO_ID_MOODLE: moodle_id,
+                        USUARIO_ID_TELEGRAM: telegram_id,
+                        USUARIO_NOMBRE: user.get("firstname"),
+                        USUARIO_APELLIDOS: user.get("lastname"),
+                        USUARIO_EMAIL: user.get("email"),
+                        USUARIO_TIPO: tipo,
+                        USUARIO_HORARIO: horario,
+                    })
+                return result
+            else:
+                logging.getLogger('moodle').error(f"Error al consultar Moodle: {response.status_code} - {response.text}")
+                return None
+
+        # Caso 2: Otros filtros (nombre, apellidos, etc.) → consultar Moodle y luego completar con datos locales
         else:
-            # Ya existe, actualizar tipo y curso si se proporcionan
-            matricula_id = existe['id_matricula']
-            updates = {}
-            if tipo_usuario is not None:
-                updates['Tipo'] = tipo_usuario
-            if curso != "Actual":
-                updates['Curso'] = curso
-                
-            if updates:
-                set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
-                values = list(updates.values())
-                values.append(matricula_id)
-                
-                cursor.execute(f"UPDATE Matriculas SET {set_clause} WHERE id_matricula = ?", values)
-                conn.commit()
-                
-        conn.close()
-        return matricula_id
-        
+            # Construcción de criterios Moodle
+            criteria = []
+            for i, (k, v) in enumerate(kwargs.items()):
+                moodle_key = USUARIO_FIELDS[k].lower()
+                if moodle_key not in [USUARIO_ID_MOODLE, USUARIO_EMAIL, USUARIO_NOMBRE, USUARIO_APELLIDOS]:
+                    raise ValueError(f"Campo inválido para Moodle: {k}")
+                if moodle_key == USUARIO_ID_MOODLE: moodle_key = "id"
+                criteria.append((f"criteria[{i}][key]", moodle_key))
+                criteria.append((f"criteria[{i}][value]", v))
+
+            payload = {
+                'wstoken': MOODLE_TOKEN,
+                'wsfunction': 'core_user_get_users',
+                'moodlewsrestformat': 'json',
+            }
+            payload.update(dict(criteria))
+
+            url = f"{MOODLE_ADDRESS}/webservice/rest/server.php"
+            response = requests.post(url, params=payload)
+
+            if response.ok:
+                users = response.json().get("users", [])
+                result = []
+                for user in users:
+                    id_moodle = user.get("id")
+                    # Buscar usuario en BD por id
+                    query = f"SELECT * FROM {USUARIOS} WHERE {USUARIO_ID_MOODLE} = {PLACEHOLDER}"
+                    args = (id_moodle,)
+                    if USUARIO_TIPO in kwargs:
+                        query += f" AND {USUARIO_TIPO} = {PLACEHOLDER}"
+                        args+=(kwargs[USUARIO_TIPO],)
+                    cursor.execute(query, args)
+                    local = cursor.fetchone()
+                    id = local[USUARIO_ID] if local else None
+                    telegram_id = local[USUARIO_ID_TELEGRAM] if local else None
+                    tipo = local[USUARIO_TIPO] if local else None
+                    horario = local[USUARIO_HORARIO] if local and USUARIO_HORARIO in local else None
+
+                    result.append({
+                        USUARIO_ID: id,
+                        USUARIO_ID_MOODLE: id_moodle,
+                        USUARIO_ID_TELEGRAM: telegram_id,
+                        USUARIO_NOMBRE: user.get("firstname"),
+                        USUARIO_APELLIDOS: user.get("lastname"),
+                        USUARIO_EMAIL: user.get("email"),
+                        USUARIO_TIPO: tipo,
+                        USUARIO_HORARIO: horario,
+                    })
+                return result
+            else:
+                logging.getLogger('moodle').error(f"Error al consultar Moodle: {response.status_code} - {response.text}")
+                return None
+
     except Exception as e:
-        logger.error(f"Error al crear matrícula: {e}")
+        logging.getLogger('db.queries').error(f"Error al obtener usuario(s): {e}")
+        rollback()
         return None
 
-def get_matriculas_by_user(user_id):
-    """Obtiene las matrículas de un usuario con información de asignaturas"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
     
-    cursor.execute("""
-        SELECT 
-            m.id_matricula, 
-            m.Id_usuario, 
-            m.Id_asignatura, 
-            m.Curso, 
-            a.Nombre as Asignatura,
-            u.Carrera as Carrera
-        FROM 
-            Matriculas m
-        JOIN 
-            Asignaturas a ON m.Id_asignatura = a.Id_asignatura
-        JOIN
-            Usuarios u ON m.Id_usuario = u.Id_usuario
-        WHERE 
-            m.Id_usuario = ?
-    """, (user_id,))
-    
-    matriculas = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    
-    return matriculas
-
-def verificar_estudiante_matriculado(estudiante_id, asignatura_id):
-    """Verifica si un estudiante está matriculado en una asignatura"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT COUNT(*) as count 
-        FROM Matriculas
-        WHERE Id_usuario = ? AND Id_asignatura = ?
-    """, (estudiante_id, asignatura_id))
-    
-    result = cursor.fetchone()
-    conn.close()
-    
-    return result['count'] > 0
-
-def get_matriculas_usuario(user_id):
-    """Obtiene las matrículas de un usuario incluyendo nombres de asignatura"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute("""
-            SELECT m.*, a.Nombre as Asignatura 
-            FROM Matriculas m
-            JOIN Asignaturas a ON m.Id_asignatura = a.Id_asignatura
-            WHERE m.Id_usuario = ?
-        """, (user_id,))
-        
-        # Convertir filas a diccionarios para facilitar su uso
-        result = [dict(row) for row in cursor.fetchall()]
-        return result
-    except Exception as e:
-        print(f"Error al obtener matrículas: {e}")
+def get_usuarios_by_multiple_ids(usuarios_ids):
+    """Obtiene usuarios desde Moodle, complementando con datos locales a partir de una lista de IDs"""
+    if not usuarios_ids:
         return []
-    finally:
-        conn.close()
 
-# ===== FUNCIONES DE GRUPOS =====
-def crear_grupo_tutoria(profesor_id, nombre_sala, tipo_sala, asignatura_id, chat_id, enlace=None, proposito=None):
-    """Crea un nuevo grupo de tutoría en la base de datos"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute('''
-            INSERT INTO Grupos_tutoria 
-            (Id_usuario, Nombre_sala, Tipo_sala, Id_asignatura, Chat_id, Enlace_invitacion, Proposito_sala) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (profesor_id, nombre_sala, tipo_sala, asignatura_id, str(chat_id), enlace, proposito))
-        
-        conn.commit()
-        grupo_id = cursor.lastrowid
-        return grupo_id
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
+    cursor = get_cursor()
 
-def crear_grupo_tutoria_directo(conn, profesor_id, nombre_sala, tipo_sala, asignatura_id, chat_id, enlace=None):
-    """
-    Versión adaptada de crear_grupo_tutoria que utiliza una conexión existente
-    y es compatible con la estructura actual de la base de datos
-    """
     try:
-        cursor = conn.cursor()
+        # Paso 1: Obtener emails y datos locales de la BD
+        placeholders = ",".join([PLACEHOLDER for _ in usuarios_ids])
+        query = f"SELECT * FROM {USUARIOS} WHERE {USUARIO_ID} IN ({placeholders})"
+        cursor.execute(query, list(usuarios_ids))
+        rows = cursor.fetchall()
+
+        # Mapear usuario_id → info local
+        local_data = {}
+        ids_moodle = []
+        for row in rows:
+            row_dict = dict(row)
+            usuario_id = row_dict[USUARIO_ID]
+            ids_moodle.append(row_dict[USUARIO_ID_MOODLE])
+            local_data[usuario_id] = {
+                USUARIO_ID: usuario_id,
+                USUARIO_ID_MOODLE: row_dict[USUARIO_ID_MOODLE],
+                USUARIO_ID_TELEGRAM: row_dict[USUARIO_ID_TELEGRAM],
+                USUARIO_TIPO: row_dict[USUARIO_TIPO],
+                USUARIO_HORARIO: row_dict[USUARIO_HORARIO],
+            }
+
+        if not ids_moodle:
+            return []
         
-        # Primera inserción - Grupo (usando el nombre correcto de la columna: Enlace_invitacion)
-        cursor.execute("""
-            INSERT INTO Grupos_tutoria 
-            (Id_usuario, Nombre_sala, Tipo_sala, Id_asignatura, Chat_id, Proposito_sala, Enlace_invitacion)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (profesor_id, nombre_sala, tipo_sala, asignatura_id, chat_id, 
-              'avisos' if tipo_sala == 'pública' else 'individual', enlace))
-        
-        # Obtener el ID generado del grupo
-        grupo_id = cursor.lastrowid
-        
-        # Añadir al profesor como miembro del grupo (en lugar de usar Administradores_Grupo)
-        cursor.execute("""
-            INSERT INTO Miembros_Grupo (id_sala, Id_usuario, Estado)
-            VALUES (?, ?, 'activo')
-        """, (grupo_id, profesor_id))
-        
-        return grupo_id
+        # Paso 2: Consultar Moodle para los emails obtenidos
+        results = []
+        for i, id in enumerate(ids_moodle):
+            # Moodle no permite múltiples criteria a la vez con la misma clave para usuarios,
+            # así que usamos múltiples peticiones (muy lento).
+            payload = {
+                'wstoken': MOODLE_TOKEN,
+                'wsfunction': 'core_user_get_users',
+                'moodlewsrestformat': 'json',
+                f'criteria[0][key]': 'id',
+                f'criteria[0][value]': id,
+            }
+
+            url = f"{MOODLE_ADDRESS}/webservice/rest/server.php"
+            response = requests.post(url, params=payload)
+            if response.ok:
+                users = response.json().get("users", [])
+                for user in users:
+                    moodle_id = user.get("id")
+                    local = local_data.get(moodle_id, {})
+                    results.append({
+                        USUARIO_ID: local.get(USUARIO_ID),
+                        USUARIO_ID_MOODLE: moodle_id,
+                        USUARIO_NOMBRE: user.get("firstname"),
+                        USUARIO_APELLIDOS: user.get("lastname"),
+                        USUARIO_EMAIL: user.get("email"),
+                        USUARIO_TIPO: local.get(USUARIO_TIPO, 'student'),
+                        USUARIO_ID_TELEGRAM: local.get(USUARIO_ID_TELEGRAM),
+                        USUARIO_HORARIO: local.get(USUARIO_HORARIO),
+                        })
+            else:
+                logging.getLogger("moodle").error(f"Error al consultar Moodle para id {id}: {response.status_code} - {response.text}")
+
+        # Ordenar por nombre y apellidos como hacía el original
+        return sorted(results, key=lambda u: (u.get(USUARIO_NOMBRE) or '', u.get(USUARIO_APELLIDOS) or ''))
+
     except Exception as e:
-        print(f"Error en crear_grupo_tutoria_directo: {e}")
-        conn.rollback()
+        logging.getLogger("db.queries").error(f"Error al obtener usuarios por IDs: {e}")
+        return []
+
+def get_usuarios_by_multiple_ids_local(usuarios_ids):
+    """Obtiene usuarios desde Moodle, complementando con datos locales a partir de una lista de IDs"""
+    if not usuarios_ids:
+        return []
+
+    cursor = get_cursor()
+
+    try:
+        placeholders = ",".join([PLACEHOLDER for _ in usuarios_ids])
+        query = f"SELECT * FROM {USUARIOS} WHERE {USUARIO_ID} IN ({placeholders})"
+        cursor.execute(query, list(usuarios_ids))
+        
+        return [dict(row) for row in cursor.fetchall()]
+
+    except Exception as e:
+        logging.getLogger("db.queries").error(f"Error al obtener usuarios por IDs: {e}")
+        return []
+
+def get_usuarios_local(**kwargs):
+    try:
+        if not all(k in {"USUARIO_ID", "USUARIO_ID_MOODLE", "USUARIO_ID_TELEGRAM", "USUARIO_TIPO"} for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Usuarios")
+        
+        query = f"SELECT * FROM {USUARIOS} WHERE 1=1"
+        for k in kwargs:
+            query += f" AND {USUARIO_FIELDS[k]} = {PLACEHOLDER}"
+        
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al obtener usuarios: {e}")
+        rollback()
         return None
 
-def actualizar_grupo_tutoria(grupo_id, **kwargs):
+
+##========================
+## ===== Asignaturas =====
+##========================
+
+def get_asignaturas(**kwargs):
     """
-    Actualiza la información de un grupo de tutoría
-    
-    Args:
-        grupo_id: ID del grupo a actualizar
-        **kwargs: Campos a actualizar (Chat_id, Enlace_invitacion, etc.)
-        
-    Returns:
-        bool: True si se actualizó correctamente
+    Busca asignaturas (cursos) en Moodle según su ID, nombre o nombre corto.
+    Campos válidos:
+        - id: ID del curso en Moodle
+        - nombre: nombre completo (fullname)
+        - nombrecorto: nombre corto (shortname)
     """
-    if not kwargs:
-        return False
-        
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
     try:
-        # Construir consulta dinámica
-        set_clause = ", ".join([f"{key} = ?" for key in kwargs.keys()])
-        values = list(kwargs.values())
-        values.append(grupo_id)
-        
-        cursor.execute(f"UPDATE Grupos_tutoria SET {set_clause} WHERE id_sala = ?", values)
-        
-        success = cursor.rowcount > 0
-        conn.commit()
-        return success
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Error al actualizar grupo de tutoría: {e}")
-        return False
-    finally:
-        conn.close()
+        if not kwargs:
+            raise ValueError("Debe especificar al menos un criterio de búsqueda")
+        if not all(k in ASIGNATURA_CAMPOS_VALIDOS for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Asignaturas (permitidos: ASIGNATURA_ID, ASIGNATURA_NOMBRE, ASIGNATURA_NOMBRE_CORTO)")
+        if len(kwargs) != 1:
+            raise ValueError("Solo se permite un campo de búsqueda a la vez")
 
-def obtener_grupos(profesor_id=None, asignatura_id=None):
-    """
-    Obtiene grupos de tutoría aplicando filtros opcionales
-    
-    Args:
-        profesor_id: ID del profesor (opcional)
-        asignatura_id: ID de la asignatura (opcional)
-        
-    Returns:
-        list: Lista de grupos que cumplen los criterios
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    query = """
-        SELECT g.*, a.Nombre as Asignatura, u.Nombre as Profesor, u.Apellidos as Apellidos_Profesor
-        FROM Grupos_tutoria g
-        LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-        JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-        WHERE 1=1
-    """
-    params = []
-    
-    if profesor_id is not None:
-        query += " AND g.Id_usuario = ?"
-        params.append(profesor_id)
-    
-    if asignatura_id is not None:
-        query += " AND g.Id_asignatura = ?"
-        params.append(asignatura_id)
-    
-    # Añadir condición para mostrar solo grupos válidos
-    query += " AND g.Chat_id IS NOT NULL"
-    
-    cursor.execute(query, params)
-    
-    grupos = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    
-    return grupos
+        campo = next(iter(kwargs))
+        valor = kwargs[campo]
 
-def obtener_grupos_por_asignaturas(asignaturas_ids):
-    """Obtiene grupos de tutorías para múltiples asignaturas"""
-    if not asignaturas_ids:
-        return []
-        
-    placeholders = ",".join(["?" for _ in asignaturas_ids])
-    
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute(f"""
-        SELECT g.*, a.Nombre as Asignatura, u.Nombre as Profesor, u.Apellidos as Apellidos_Profesor
-        FROM Grupos_tutoria g
-        JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-        JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-        WHERE g.Id_asignatura IN ({placeholders}) AND g.Chat_id IS NOT NULL
-        ORDER BY u.Nombre, g.Nombre_sala
-    """, asignaturas_ids)
-    
-    grupos = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    
-    return grupos
+        moodle_field = ASIGNATURA_FIELDS[campo]
 
-def obtener_grupo_por_id(grupo_id):
-    """Obtiene un grupo de tutoría por su ID"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT g.*, a.Nombre as Asignatura, u.Nombre as Profesor, u.Apellidos as Apellidos_Profesor
-        FROM Grupos_tutoria g
-        LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-        JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-        WHERE g.id_sala = ?
-    """, (grupo_id,))
-    
-    grupo = cursor.fetchone()
-    conn.close()
-    
-    return dict(grupo) if grupo else None
+        # Preparar petición a Moodle
+        payload = {
+            "wstoken": MOODLE_TOKEN,
+            "wsfunction": "core_course_get_courses_by_field",
+            "moodlewsrestformat": "json",
+            "field": moodle_field,
+            "value": valor
+        }
 
-def añadir_estudiante_grupo(grupo_id, estudiante_id):
-    """Añade un estudiante a un grupo de tutoría"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute("""
-            INSERT INTO Miembros_Grupo (id_sala, Id_usuario)
-            VALUES (?, ?)
-        """, (grupo_id, estudiante_id))
-        
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        # El estudiante ya está en el grupo
-        return True
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"Error al añadir estudiante al grupo: {e}")
-        return False
-    finally:
-        conn.close()
+        url = f"{MOODLE_ADDRESS}/webservice/rest/server.php"
+        response = requests.post(url, params=payload)
 
-# ===== PROFESORES Y HORARIOS =====
-def obtener_profesores_por_asignaturas(asignaturas_ids):
-    """Obtiene profesores que imparten las asignaturas especificadas"""
-    if not asignaturas_ids:
-        return []
-        
-    placeholders = ",".join(["?" for _ in asignaturas_ids])
-    
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute(f"""
-        SELECT DISTINCT u.Id_usuario, u.Nombre, u.Apellidos, u.Email_UGR, hp.dia || ' de ' || hp.hora_inicio || ' a ' || hp.hora_fin AS Horario
-        FROM Usuarios u
-        JOIN Matriculas m ON u.Id_usuario = m.Id_usuario
-        LEFT JOIN Horarios_Profesores hp ON u.Id_usuario = hp.Id_usuario
-        WHERE u.Tipo = 'profesor' AND m.Id_asignatura IN ({placeholders})
-    """, asignaturas_ids)
-    
-    profesores = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    
-    return profesores
+        if response.ok:
+            cursos = response.json().get("courses", [])
 
-def get_horarios_profesor(profesor_id):
-    """Obtiene el horario de un profesor desde la tabla Usuarios"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute('''
-            SELECT 
-                Id_usuario,
-                Nombre,
-                Horario
-            FROM 
-                Usuarios
-            WHERE 
-                Id_usuario = ? AND Tipo = 'profesor'
-        ''', (profesor_id,))
-        
-        result = cursor.fetchone()
-        
-        if not result or not result['Horario']:
-            print(f"No se encontró horario para profesor ID: {profesor_id}")
+            return [
+                {
+                    ASIGNATURA_ID: curso.get("id"),
+                    ASIGNATURA_NOMBRE: curso.get("fullname"),
+                    ASIGNATURA_NOMBRE_CORTO: curso.get("shortname"),
+                }
+                for curso in cursos
+            ]
+        else:
+            logging.getLogger("moodle").error(
+                f"Error al consultar Moodle: {response.status_code} - {response.text}"
+            )
             return None
-            
-        return result['Horario']
+
     except Exception as e:
-        import logging
-        logging.getLogger('db.queries').error(f"Error al obtener horario: {e}")
+        logging.getLogger("moodle").error(f"Error al obtener asignatura(s) desde Moodle: {e}")
         return None
-    finally:
-        conn.close()
 
-def verificar_disponibilidad_profesor(profesor_id):
-    """Verifica si un profesor está disponible actualmente según su horario"""
-    from handlers.tutorias import verificar_horario_tutoria
-    
-    # Obtener horario del profesor
-    horario = get_horarios_profesor(profesor_id)
-    
-    # Si no hay horario registrado, asumir no disponible
-    if not horario:
-        return False
-        
-    # Verificar si estamos en horario de tutoría
-    return verificar_horario_tutoria(horario)
 
-# ===== ASIGNATURAS Y CARRERAS =====
-def get_o_crear_carrera(nombre_carrera):
-    """Obtiene una carrera por nombre o la crea si no existe"""
-    if not nombre_carrera or nombre_carrera.strip() == '':
-        return None  # No crear carreras vacías
-        
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
+
+##===========================
+## ===== Grupos_tutoria =====
+##===========================
+
+def create_grupo_tutoria(usuario_id, nombre, tipo, asignatura_id, chat_id = None, enlace_invitacion = None, do_commit=True):
+    cursor = get_cursor()
     try:
-        # Buscar la carrera por nombre
-        cursor.execute("SELECT id_carrera FROM Carreras WHERE Nombre_carrera = ?", (nombre_carrera,))
-        carrera = cursor.fetchone()
+        query = f"""INSERT INTO {GRUPOS} ({GRUPO_ID_PROFESOR}, {GRUPO_NOMBRE}, {GRUPO_TIPO}, {GRUPO_ID_ASIGNATURA}, {GRUPO_ID_CHAT}, {GRUPO_ENLACE}) 
+            VALUES ({PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER})"""
         
-        if carrera:
-            # La carrera ya existe
-            carrera_id = carrera[0]
-        else:
-            # Crear nueva carrera
-            cursor.execute("INSERT INTO Carreras (Nombre_carrera) VALUES (?)", (nombre_carrera,))
-            carrera_id = cursor.lastrowid
-            conn.commit()
-            
-        return carrera_id
-        
-    except Exception as e:
-        print(f"Error al obtener/crear carrera: {e}")
-        return None
-        
-    finally:
-        conn.close()
-
-def get_carreras():
-    """Obtiene todas las carreras"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT id_carrera, Nombre_carrera FROM Carreras ORDER BY Nombre_carrera")
-    carreras = [dict(row) for row in cursor.fetchall()]
-    
-    conn.close()
-    return carreras
-
-def get_carreras_by_area(area_id=None):
-    """
-    Función de compatibilidad que mantiene la interfaz anterior.
-    Ahora simplemente devuelve todas las carreras sin filtrar por área.
-    
-    Args:
-        area_id: Ignorado, mantenido para compatibilidad
-        
-    Returns:
-        list: Lista de todas las carreras
-    """
-    # Simplemente llamamos a la nueva función sin filtrado por área
-    return get_carreras()
-
-def crear_asignatura(nombre, sigla=None, id_carrera=None):
-    """Crea una nueva asignatura en la base de datos"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Verificar columnas existentes
-        cursor.execute("PRAGMA table_info(Asignaturas)")
-        columnas = [col[1] for col in cursor.fetchall()]
-        
-        # Construir consulta según columnas disponibles
-        if 'Sigla' in columnas and 'Id_carrera' in columnas:
-            cursor.execute(
-                "INSERT INTO Asignaturas (Nombre, Sigla, Id_carrera) VALUES (?, ?, ?)",
-                (nombre, sigla, id_carrera)
-            )
-        elif 'Sigla' in columnas:
-            cursor.execute(
-                "INSERT INTO Asignaturas (Nombre, Sigla) VALUES (?, ?)",
-                (nombre, sigla)
-            )
-        else:
-            # Sin columna Sigla
-            cursor.execute(
-                "INSERT INTO Asignaturas (Nombre) VALUES (?)",
-                (nombre,)
-            )
-        
-        conn.commit()
+        cursor.execute(query, (usuario_id, nombre, tipo, asignatura_id, chat_id, enlace_invitacion))        
+        if do_commit:
+            commit()
         return cursor.lastrowid
     except Exception as e:
-        print(f"Error al crear asignatura: {e}")
-        conn.rollback()
+        print(f"Error al crear grupo de tutoría: {e}")
+        rollback()
         return None
-    finally:
-        conn.close()
 
-def crear_matricula(id_usuario, id_asignatura, tipo_usuario='estudiante', verificar_duplicados=True):
-    """Crea una nueva matrícula para un usuario en una asignatura"""
-    if id_usuario is None or id_asignatura is None:
-        print("Error: Usuario o asignatura inválidos")
-        return False
-        
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
+##No se usa    
+def update_grupo_tutoria(grupo_id, do_commit=True, **kwargs):
+    """Actualiza los datos de una grupo de tutoría"""
+    if not all(k in GRUPO_CAMPOS_VALIDOS for k in kwargs):
+        raise ValueError("Campo inválido en la actualización del grupo de tutoría")
+
     try:
-        # Verificar si ya existe esta matrícula
-        if verificar_duplicados:
-            cursor.execute(
-                "SELECT * FROM Matriculas WHERE Id_usuario = ? AND Id_asignatura = ?",
-                (id_usuario, id_asignatura)
-            )
-            if cursor.fetchone():
-                # Ya existe, no hacer nada
-                print(f"  ⏩ Matrícula ya existente - omitiendo")
-                return True
-        
-        # Crear nueva matrícula
-        cursor.execute(
-            "INSERT INTO Matriculas (Id_usuario, Id_asignatura, Tipo) VALUES (?, ?, ?)",
-            (id_usuario, id_asignatura, tipo_usuario)
-        )
-        conn.commit()
-        return True
+        query = f"UPDATE {GRUPOS} SET "
+        query += ", ".join([f"{GRUPO_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
+        query += f" WHERE {GRUPO_ID} = {PLACEHOLDER}"
+                
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()) + [grupo_id])
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
     except Exception as e:
-        print(f"Error al crear matrícula: {e}")
-        conn.rollback()
+        logging.getLogger('db.queries').error(f"Error al actualizar grupo_tutoria: {e}")
+        rollback()
         return False
-    finally:
-        conn.close()
 
-def get_salas_profesor_asignatura(profesor_id, asignatura_id):
+def delete_grupo_tutoria(grupo_id):
+    cursor = get_cursor()
+    try:
+        cursor.execute(f"DELETE FROM {GRUPOS} WHERE {GRUPO_ID} = {PLACEHOLDER}", (grupo_id,))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar grupo de tutoría: {e}")
+        rollback()
+
+def get_grupos_tutoria(**kwargs):
     """
-    Obtiene las salas de tutoría de un profesor para una asignatura específica
+    Devuelve grupos de tutoría desde la BD local, enriquecidos con:
+    - Nombre de la asignatura desde Moodle (fullname)
+    - Nombre y apellidos del profesor desde Moodle (firstname + lastname)
     """
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        if not all(k in GRUPO_CAMPOS_VALIDOS for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Grupos_tutoria")
+
+        # Consulta local básica
+        query = f"""SELECT * FROM {GRUPOS} WHERE 1=1"""
+
+        for k in kwargs:
+            query += f" AND {GRUPO_FIELDS[k]} = {PLACEHOLDER}"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        rows = cursor.fetchall()
+
+        result = []
+        for row in rows:
+            result.append(dict(row))
+
+        return result
+
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al obtener grupo de tutoría: {e}")
+        rollback()
+        return None
+
     
-    cursor.execute("""
-        SELECT g.*, u.Nombre as NombreProfesor 
-        FROM Grupos_tutoria g
-        JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-        WHERE g.Id_usuario = ? AND (g.Id_asignatura = ? OR g.Id_asignatura IS NULL)
-        ORDER BY g.Proposito_sala ASC
-    """, (profesor_id, asignatura_id))
-    
-    salas = cursor.fetchall()
-    conn.close()
-    
-    return salas if salas else []
+
+##=======================
+## ===== Matriculas =====
+##=======================
+
+def get_matriculas_asignatura_de_usuario(**kwargs):
+    """
+    Devuelve lista de dicts con: usuario_id, asignatura_id, matricula_tipo y nombre de la asignatura.
+    Filtra por: usuario_id, asignatura_id, y/o rol.
+    """
+    try:
+        usuario_id = kwargs.get("MATRICULA_ID_USUARIO")
+        asignatura_id = kwargs.get("MATRICULA_ID_ASIGNATURA")
+        rol = kwargs.get("MATRICULA_TIPO")  # Ej: "editingteacher", "student", etc.
+
+        if not (usuario_id or asignatura_id):
+            raise ValueError("Se requiere al menos 'usuario_id' o 'asignatura_id'")
+
+        url = f"{MOODLE_ADDRESS}/webservice/rest/server.php"
+        token = MOODLE_TOKEN
+
+        results = []
+
+        # --- Caso: buscar por usuario ---
+        if usuario_id:
+            usuario_busqueda_local = get_usuarios_local(USUARIO_ID=usuario_id)
+            if not usuario_busqueda_local or usuario_busqueda_local == []:
+                return []
+            usuario_busqueda_local = usuario_busqueda_local[0]
+            payload = {
+                "wstoken": token,
+                "wsfunction": "core_enrol_get_users_courses",
+                "moodlewsrestformat": "json",
+                "userid": usuario_busqueda_local[USUARIO_ID_MOODLE],
+            }
+            resp = requests.post(url, params=payload)
+            if not resp.ok:
+                raise Exception(f"Error al consultar cursos del usuario: {resp.text}")
+            cursos = resp.json()
+
+            for curso in cursos:
+                course_id = curso["id"]
+                course_name = curso.get("fullname", "Desconocido")
+                course_shortname = curso.get("shortname", "Desconocido")
+
+                # Si se especifica asignatura_id y no coincide, se omite
+                if asignatura_id and course_id != asignatura_id:
+                    continue
+                
+                if rol:
+                    # Obtener usuarios de ese curso para verificar el rol
+                    payload_users = {
+                        "wstoken": token,
+                        "wsfunction": "core_enrol_get_enrolled_users",
+                        "moodlewsrestformat": "json",
+                        "courseid": course_id,
+                    }
+                    resp_users = requests.post(url, params=payload_users)
+                    if not resp_users.ok:
+                        raise Exception(f"Error al consultar usuarios del curso {course_id}: {resp_users.text}")
+                    usuarios = resp_users.json()
+
+                    for user in usuarios:
+                        user_local = get_usuarios_local(USUARIO_ID_MOODLE=user['id'])
+                        if not user_local or user_local == []:
+                            continue
+                        user_local = user_local[0]
+                        if user["id"] != usuario_busqueda_local[USUARIO_ID_MOODLE] and (not rol or rol != MATRICULA_TODAS):
+                            continue
+                        roles = [r["shortname"] for r in user.get("roles", [])]
+                        if rol and rol != MATRICULA_TODAS and rol not in roles:
+                            continue
+                        results.append({
+                            MATRICULA_ID_USUARIO: user_local[USUARIO_ID],
+                            MATRICULA_ID_MOODLE: user["id"],
+                            MATRICULA_ID_ASIGNATURA: course_id,
+                            MATRICULA_TIPO: MATRICULA_PROFESOR if roles and MATRICULA_PROFESOR in roles else MATRICULA_ESTUDIANTE,
+                            MATRICULA_ASIGNATURA_NOMBRE: course_name,
+                            MATRICULA_ASIGNATURA_NOMBRE_CORTO: course_shortname,
+                            MATRICULA_USUARIO_NOMBRE: user.get("firstname", "Desconocido"),
+                            MATRICULA_USUARIO_APELLIDOS: user.get("lastname", "Desconocido"),
+                            MATRICULA_USUARIO_EMAIL: user.get("email", "Desconocido"),
+                        })
+                else:
+                    # Si no se especifica rol, no conocemos el tipo de matrícula
+                    results.append({
+                        MATRICULA_ID_USUARIO: usuario_id,
+                        MATRICULA_ID_MOODLE: usuario_busqueda_local[USUARIO_ID_MOODLE],
+                        MATRICULA_ID_ASIGNATURA: course_id,
+                        MATRICULA_TIPO: "No obtenido",  # No se especifica tipo
+                        MATRICULA_ASIGNATURA_NOMBRE: course_name,
+                        MATRICULA_ASIGNATURA_NOMBRE_CORTO: course_shortname,
+                        MATRICULA_USUARIO_NOMBRE: "No obtenido",
+                        MATRICULA_USUARIO_APELLIDOS: "No obtenido",
+                        MATRICULA_USUARIO_EMAIL: "No obtenido",
+                    })
+
+        # --- Caso: buscar por curso ---
+        elif asignatura_id:
+            payload = {
+                "wstoken": token,
+                "wsfunction": "core_enrol_get_enrolled_users",
+                "moodlewsrestformat": "json",
+                "courseid": asignatura_id,
+            }
+            resp = requests.post(url, params=payload)
+            if not resp.ok:
+                raise Exception(f"Error al consultar usuarios del curso: {resp.text}")
+            
+            usuarios = resp.json()
+
+            for user in usuarios:
+                usuario_busqueda_local = get_usuarios_local(USUARIO_ID_MOODLE=user["id"])
+                if not usuario_busqueda_local or usuario_busqueda_local == []:
+                    continue
+                usuario_busqueda_local = usuario_busqueda_local[0]
+                if usuario_id and usuario_busqueda_local[USUARIO_ID] != usuario_id:
+                    continue
+                roles = [r["shortname"] for r in user.get("roles", [])]
+                if rol and rol != MATRICULA_TODAS and rol not in roles:
+                    continue
+                results.append({
+                    MATRICULA_ID_USUARIO: usuario_busqueda_local[USUARIO_ID],
+                    MATRICULA_ID_MOODLE: user["id"],
+                    MATRICULA_ID_ASIGNATURA: asignatura_id,
+                    MATRICULA_TIPO: MATRICULA_PROFESOR if roles and MATRICULA_PROFESOR in roles else MATRICULA_ESTUDIANTE,
+                    MATRICULA_ASIGNATURA_NOMBRE: "No obtenido",
+                    MATRICULA_ASIGNATURA_NOMBRE_CORTO: "No obtenido",
+                    MATRICULA_USUARIO_NOMBRE: user.get("firstname", "Desconocido"),
+                    MATRICULA_USUARIO_APELLIDOS: user.get("lastname", "Desconocido"),
+                    MATRICULA_USUARIO_EMAIL: user.get("email", "No especificado"),
+                })
+        return results
+
+    except Exception as e:
+        logging.getLogger('moodle').error(f"Error en get_matriculas_moodle: {e}")
+        return None
 
 
-def get_profesores_asignatura(asignatura_id):
-    """
-    Obtiene todos los profesores que imparten una asignatura específica
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
+
+##=========================
+## ===== Valoraciones =====
+##=========================
+
+def insert_valoracion(evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo, do_commit=True):
+    cursor = get_cursor()
+    try:
+        cursor.execute(
+            f"""INSERT INTO {VALORACIONES} ({VALORACION_ID_EVALUADOR}, {VALORACION_ID_PROFESOR}, {VALORACION_PUNTUACION}, {VALORACION_COMENTARIO}, {VALORACION_FECHA}, {VALORACION_ANONIMA})
+            VALUES ({PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER})""",
+            (evaluador_id, profesor_id, puntuacion, comentario, fecha, es_anonimo)
+        )
+        if do_commit:
+            commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error al crear valoración: {e}")
+        rollback()
+        return None
     
-    cursor.execute("""
-        SELECT DISTINCT u.*
-        FROM Usuarios u
-        JOIN Matriculas m ON u.Id_usuario = m.Id_usuario
-        WHERE m.Id_asignatura = ? 
-        AND u.Tipo = 'profesor' 
-        AND m.Tipo = 'docente'
-    """, (asignatura_id,))
+##No se usa
+def update_valoracion(valoracion_id, do_commit=True, **kwargs):
+    """Actualiza los datos de una valoración"""
+    if not all(k in VALORACION_CAMPOS_VALIDOS for k in kwargs):
+        raise ValueError("Campo inválido en la actualización de valoración")
+
+    try:
+        query = f"UPDATE {VALORACIONES} SET "
+        query += ", ".join([f"{VALORACION_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
+        query += f" WHERE {VALORACION_ID} = {PLACEHOLDER}"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()) + [valoracion_id])
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al actualizar valoración: {e}")
+        rollback()
+        return False
+
+def delete_valoracion(id_valoracion):
+    cursor = get_cursor()
+    try:
+        cursor.execute(f"DELETE FROM {VALORACIONES} WHERE {VALORACION_ID} = {PLACEHOLDER}", (id_valoracion,))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar valoración: {e}")
+        rollback()
+
+def get_valoraciones(**kwargs):
+    try:
+        if not all(k in VALORACION_CAMPOS_VALIDOS for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Valoraciones")
+
+        query = f"SELECT * FROM {VALORACIONES} WHERE 1=1"
+        for k in kwargs:
+            query += f" AND {VALORACION_FIELDS[k]} = {PLACEHOLDER}"
+            
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        logging.getLogger('db.queries').error(f"Error al obtener valoración(es): {e}")
+        rollback()
+        return None
+
+
+
+##=======================
+## ===== Reacciones =====
+##=======================
     
-    profesores = cursor.fetchall()
-    conn.close()
+
+def insert_reaccion(profesor_id, alumno_id, asignatura_id, emoji, cantidad, do_commit=True):
+    cursor = get_cursor()
+    try:
+        cursor.execute(
+            f"""INSERT INTO {REACCIONES} 
+                ({REACCION_ID_PROFESOR}, {REACCION_ID_ALUMNO}, {REACCION_ID_ASIGNATURA}, {REACCION_EMOJI}, {REACCION_CANTIDAD}) 
+                VALUES ({PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER})""",
+            (profesor_id, alumno_id,asignatura_id, emoji, cantidad)
+        )
+        if do_commit:
+            commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error al crear reacción: {e}")
+        rollback()
+        return None
+
+def update_reaccion(reaccion_id, do_commit=True, **kwargs):
+    """Actualiza los datos de una reacción"""
+    if not all(k in REACCION_CAMPOS_VALIDOS for k in kwargs):
+        raise ValueError("Campo inválido en la actualización de reacción")
+
+    try:
+        query = f"UPDATE {REACCIONES} SET "
+        query += ", ".join([f"{REACCION_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
+        query += f" WHERE {REACCION_ID} = {PLACEHOLDER}"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()) + [reaccion_id])
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Error al actualizar reacción: {e}")
+        rollback()
+        return False
+
+def delete_reaccion(reaccion_id, do_commit=True):
+    cursor = get_cursor()
+    try:
+        cursor.execute(f"DELETE FROM {REACCIONES} WHERE {REACCION_ID} = {PLACEHOLDER}", (reaccion_id,))
+        if do_commit:
+            commit()
+    except Exception as e:
+        print(f"Error al eliminar reacción: {e}")
+        rollback()
+
+def get_reacciones(**kwargs):
+    try:
+        if not all(k in REACCION_CAMPOS_VALIDOS for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de reacciones")
+
+        query = f"SELECT * FROM {REACCIONES} WHERE 1=1"
+        for k in kwargs:
+            query += f" AND {REACCION_FIELDS[k]} = {PLACEHOLDER}"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"Error al obtener reacción(es): {e}")
+        rollback()
+        return None
     
-    return profesores if profesores else []
+
+
+##=====================
+## ===== Mensajes =====
+##=====================
+
+
+def insert_mensaje(telegram_id, chat_id, sender_id, profesor_id, asignatura_id, texto, do_commit=True):
+    cursor = get_cursor()
+    try:
+        cursor.execute(
+            f"""INSERT INTO {MENSAJES} 
+            ({MENSAJE_ID_TELEGRAM}, {MENSAJE_ID_CHAT}, {MENSAJE_ID_SENDER}, 
+             {MENSAJE_ID_PROFESOR}, {MENSAJE_ID_ASIGNATURA}, {MENSAJE_TEXTO}) 
+            VALUES ({PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER}, {PLACEHOLDER})""",
+            (telegram_id, chat_id, sender_id, profesor_id, asignatura_id, texto)
+        )
+        if do_commit:
+            commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error al insertar mensaje: {e}")
+        rollback()
+        return None
+
+def update_mensaje(mensaje_id, do_commit=True, **kwargs):
+    if not all(k in MENSAJE_CAMPOS_VALIDOS for k in kwargs):
+        raise ValueError("Campo inválido en la actualización de mensaje")
+
+    try:
+        query = f"UPDATE {MENSAJES} SET "
+        query += ", ".join([f"{MENSAJE_FIELDS[k]} = {PLACEHOLDER}" for k in kwargs])
+        query += f" WHERE {MENSAJE_ID} = {PLACEHOLDER}"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()) + [mensaje_id])
+        if do_commit:
+            commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Error al actualizar mensaje: {e}")
+        rollback()
+        return False
+
+def delete_mensaje(mensaje_id):
+    cursor = get_cursor()
+    try:
+        cursor.execute(f"DELETE FROM {MENSAJES} WHERE {MENSAJE_ID} = {PLACEHOLDER}", (mensaje_id,))
+        commit()
+    except Exception as e:
+        print(f"Error al eliminar mensaje: {e}")
+        rollback()
+
+def get_mensajes(**kwargs):
+    try:
+        if not all(k in MENSAJE_CAMPOS_VALIDOS for k in kwargs):
+            raise ValueError("Campo inválido en búsqueda de Mensajes")
+
+        query = f"SELECT * FROM {MENSAJES} WHERE 1=1"
+        for k in kwargs:
+            query += f" AND {MENSAJE_FIELDS[k]} = {PLACEHOLDER}"
+
+        cursor = get_cursor()
+        cursor.execute(query, list(kwargs.values()))
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"Error al obtener mensaje(s): {e}")
+        rollback()
+        return None

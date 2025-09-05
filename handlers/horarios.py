@@ -1,21 +1,38 @@
-import telebot
 from telebot import types
 import re
-import datetime
 import time
 import logging
 import sys
 import os
+
+import telegram
+
+from handlers.commands import COMMAND_CONFIGURAR_HORARIO, COMMAND_VER_HORARIO
+from utils.state_manager import *
 # Add parent directory to system path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Now import after modifying the path
-from db.models import get_db_connection
 
-from db.queries import update_user, get_user_by_telegram_id, update_horario_profesor
+from db.queries import get_usuarios_local, update_usuario
+from db.constantes import *
 
 # Configuración del logger
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', filename='logs/horarios.log')
+
+DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+DIAS_SEMANA_ORDEN = {"Lunes":1, "Martes":2, "Miércoles":3, "Jueves":4, "Viernes":5}
+
+# Calldata
+DIA = "dia_"
+VOLVER_DIAS = "volver_dias"
+ADD_FRANJA = "add_franja_"
+DEL_FRANJA = "del_franja_"
+VOLVER_GESTION = "volver_gestion_"
+ELIMINAR_FRANJA = "eliminar_franja_"
+GUARDAR_HORARIO = "guardar_horario"
+CANCELAR_HORARIO = "cancelar_horario"
+
 
 # Estados para la conversación
 SELECCIONANDO_DIA = "seleccionando_dia"
@@ -25,25 +42,10 @@ CONFIRMACION_GUARDAR = "confirmacion_guardar"
 POST_ANADIR_FRANJA = "post_anadir_franja"
 MODIFICAR_FRANJA = "modificar_franja"
 
-# Diccionarios para almacenar estados y datos temporales
-user_states = {}
-user_data = {}
-estados_timestamp = {}  # Para timeout de estados
 
 # Tiempo de inactividad (30 minutos)
 TIMEOUT = 30 * 60
 
-def set_state(chat_id, state):
-    """Establece el estado de la conversación para un usuario"""
-    user_states[chat_id] = state
-    estados_timestamp[chat_id] = time.time()
-
-def clear_state(chat_id):
-    """Limpia el estado de la conversación para un usuario"""
-    if chat_id in user_states:
-        del user_states[chat_id]
-    if chat_id in estados_timestamp:
-        del estados_timestamp[chat_id]
 
 def check_timeout(chat_id):
     """Comprueba si ha pasado demasiado tiempo desde la última interacción"""
@@ -59,7 +61,7 @@ def formatear_horario_bonito(horario_dict):
         return "No hay horario configurado"
     
     resultado = []
-    for dia, franjas in sorted(horario_dict.items()):
+    for dia, franjas in sorted(horario_dict.items(), key=lambda x: DIAS_SEMANA_ORDEN[x[0]]):
         if franjas:
             lineas_hora = [f"• {hora}" for hora in sorted(franjas)]
             resultado.append(f"📅 *{dia}*:\n{chr(10).join(lineas_hora)}")
@@ -78,15 +80,20 @@ def guardar_horario_bd(chat_id, horario_dict):
                 horario_str += f"{dia} {franja}"
         
         # Obtener el ID del usuario a partir del ID de Telegram
-        user = get_user_by_telegram_id(chat_id)
+        user = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0]
         if not user:
             logger.error(f"No se encontró usuario con telegram_id {chat_id}")
             return False
         
-        user_id = user['Id_usuario']  # Obtener el ID de usuario real
+        user_id = user[USUARIO_ID]  # Obtener el ID de usuario real
+
+        dias = horario_str.split(', ')
         
+        dias_ordenados = sorted(dias, key=lambda x: DIAS_SEMANA_ORDEN[x.split(' ', 1)[0]])
+        horario_str = ", ".join(dias_ordenados)
+
         # Actualizar en la base de datos usando la función específica
-        return update_horario_profesor(user_id, horario_str)
+        return update_usuario(user_id, USUARIO_HORARIO=horario_str)
         
     except Exception as e:
         logger.error(f"Error al guardar horario en BD: {e}")
@@ -97,34 +104,23 @@ def cargar_horario_bd(chat_id):
     try:
         # DIAGNÓSTICO: Imprimir valores para depuración
         print(f"Intentando cargar horario para chat_id: {chat_id}")
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Asegurarse de que el cursor devuelva diccionarios en lugar de tuples
-        # Este paso es clave para acceder usando nombres de columnas
-        cursor.row_factory = lambda cursor, row: {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
-        
+               
+
         # Verificar primero si el usuario existe
-        cursor.execute("SELECT Id_usuario, Horario FROM Usuarios WHERE TelegramID = ?", (chat_id,))
-        usuario = cursor.fetchone()
+        usuario = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0]
         
         if not usuario:
             print(f"No se encontró usuario con telegram_id {chat_id}")
-            conn.close()
             return {}
         
         # Ahora podemos acceder por nombre de columna
-        user_id = usuario['Id_usuario']
-        print(f"ID de usuario encontrado: {user_id}")
-        
+        horario_dict = {}
         # DIAGNÓSTICO: Verificar si hay un valor directo en el campo Horario
-        if usuario['Horario']:
-            print(f"Horario encontrado en campo Usuarios.Horario: {usuario['Horario']}")
+        if usuario[USUARIO_HORARIO]:
+            print(f"Horario encontrado en campo Usuarios.Horario: {usuario[USUARIO_HORARIO]}")
             # Intenta convertir el formato de cadena a diccionario
             try:
-                horario_dict = {}
-                franjas_str = usuario['Horario'].split(',')
+                franjas_str = usuario[USUARIO_HORARIO].split(',')
                 for franja in franjas_str:
                     franja = franja.strip()
                     if ' ' in franja:
@@ -133,34 +129,10 @@ def cargar_horario_bd(chat_id):
                             horario_dict[dia] = []
                         horario_dict[dia].append(horas)
                 print(f"Horario convertido a diccionario: {horario_dict}")
-                return horario_dict
+                
             except Exception as e:
                 print(f"Error al convertir horario de cadena: {e}")
-        
-        # DIAGNÓSTICO: Si no hay horario en el campo directo, buscar en la tabla Horarios_Profesores
-        print("Buscando en tabla Horarios_Profesores...")
-        cursor.execute(
-            "SELECT dia, hora_inicio, hora_fin FROM Horarios_Profesores WHERE Id_usuario = ?",
-            (user_id,)
-        )
-        
-        horarios = cursor.fetchall()
-        print(f"Registros encontrados en Horarios_Profesores: {len(horarios) if horarios else 0}")
-        
-        conn.close()
-        
-        # Convertir a formato de diccionario
-        horario_dict = {}
-        for h in horarios:
-            dia = h['dia']
-            franja = f"{h['hora_inicio']}-{h['hora_fin']}"
-            
-            if dia not in horario_dict:
-                horario_dict[dia] = []
-                
-            horario_dict[dia].append(franja)
-            
-        print(f"Horario final recuperado: {horario_dict}")
+
         return horario_dict
     except Exception as e:
         print(f"Error al cargar horario de BD: {e}")
@@ -204,15 +176,15 @@ def convertir_a_minutos(hora_str):
 def register_handlers(bot):
     """Registra los manejadores para la configuración de horarios"""
     
-    @bot.message_handler(commands=['configurar_horario'])
+    @bot.message_handler(commands=[COMMAND_CONFIGURAR_HORARIO])
     def configurar_horario(message):
         """Inicia el proceso de configuración del horario"""
         chat_id = message.chat.id
         
         # Verificar si es profesor
         try:
-            user = get_user_by_telegram_id(chat_id)
-            if not user or user['Tipo'].lower() != 'profesor':
+            user = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)[0]
+            if not user or user[USUARIO_TIPO].lower() != USUARIO_TIPO_PROFESOR:
                 bot.send_message(chat_id, "⚠️ Solo los profesores pueden configurar horarios de tutoría.")
                 return
         except Exception as e:
@@ -226,19 +198,18 @@ def register_handlers(bot):
         
         # AQUÍ ES DONDE SE CARGA EL HORARIO
         # Usar la nueva función de carga con diagnóstico
-        user_data[chat_id]['horario'] = cargar_horario_bd(chat_id)
+        user_data[chat_id][USUARIO_HORARIO] = cargar_horario_bd(chat_id)
     
         # Mostrar opciones de días de la semana
         markup = types.InlineKeyboardMarkup(row_width=2)
-        dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
-        botones_dias = [types.InlineKeyboardButton(dia, callback_data=f"dia_{dia}") for dia in dias]
+        botones_dias = [types.InlineKeyboardButton(dia, callback_data=f"{DIA}{dia}") for dia in DIAS_SEMANA]
         markup.add(*botones_dias)
-        markup.add(types.InlineKeyboardButton("💾 Guardar horario", callback_data="guardar_horario"))
-        markup.add(types.InlineKeyboardButton("❌ Cancelar", callback_data="cancelar_horario"))
+        markup.add(types.InlineKeyboardButton("💾 Guardar horario", callback_data=GUARDAR_HORARIO))
+        markup.add(types.InlineKeyboardButton("❌ Cancelar", callback_data=CANCELAR_HORARIO))
         
         # Mostrar horario actual si existe
-        if user_data[chat_id]['horario']:
-            horario_formateado = formatear_horario_bonito(user_data[chat_id]['horario'])
+        if user_data[chat_id][USUARIO_HORARIO]:
+            horario_formateado = formatear_horario_bonito(user_data[chat_id][USUARIO_HORARIO])
             mensaje = f"Tu horario actual:\n\n{horario_formateado}\n\nSelecciona un día para configurar:"
         else:
             mensaje = "No tienes un horario configurado. Selecciona un día para comenzar:"
@@ -246,18 +217,18 @@ def register_handlers(bot):
         bot.send_message(chat_id, mensaje, reply_markup=markup, parse_mode="Markdown")
         set_state(chat_id, SELECCIONANDO_DIA)
     
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("dia_") and user_states.get(call.message.chat.id) == SELECCIONANDO_DIA)
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(DIA) and get_state(call.message.chat.id) == SELECCIONANDO_DIA)
     def handle_seleccion_dia(call):
         """Maneja la selección de un día de la semana"""
         chat_id = call.message.chat.id
         dia = call.data.split("_")[1]
         
         # Guardar el día seleccionado
-        user_data[chat_id]["dia_actual"] = dia
+        user_data[chat_id][DIA_ACTUAL] = dia
         
         # Preparar mensaje y opciones para gestionar franjas horarias
-        if dia in user_data[chat_id]["horario"] and user_data[chat_id]["horario"][dia]:
-            franjas = user_data[chat_id]["horario"][dia]
+        if dia in user_data[chat_id][USUARIO_HORARIO] and user_data[chat_id][USUARIO_HORARIO][dia]:
+            franjas = user_data[chat_id][USUARIO_HORARIO][dia]
             franjas_texto = "\n".join([f"• {franja}" for franja in franjas])
             mensaje = f"📅 *{dia}*\n\nFranjas horarias configuradas:\n{franjas_texto}\n\n¿Qué deseas hacer?"
         else:
@@ -266,9 +237,9 @@ def register_handlers(bot):
         # Botones para gestionar franjas
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
-            types.InlineKeyboardButton("➕ Añadir franja horaria", callback_data=f"add_franja_{dia}"),
-            types.InlineKeyboardButton("🗑️ Eliminar franja horaria", callback_data=f"del_franja_{dia}"),
-            types.InlineKeyboardButton("🔙 Volver a selección de días", callback_data="volver_dias")
+            types.InlineKeyboardButton("➕ Añadir franja horaria", callback_data=f"{ADD_FRANJA}{dia}"),
+            types.InlineKeyboardButton("🗑️ Eliminar franja horaria", callback_data=f"{DEL_FRANJA}{dia}"),
+            types.InlineKeyboardButton("🔙 Volver a selección de días", callback_data=VOLVER_DIAS)
         )
         
         bot.edit_message_text(
@@ -281,22 +252,21 @@ def register_handlers(bot):
         set_state(chat_id, GESTION_FRANJAS)
         bot.answer_callback_query(call.id)
     
-    @bot.callback_query_handler(func=lambda call: call.data == "volver_dias" and user_states.get(call.message.chat.id) in [GESTION_FRANJAS, POST_ANADIR_FRANJA])
+    @bot.callback_query_handler(func=lambda call: call.data == VOLVER_DIAS and get_state(call.message.chat.id) in [GESTION_FRANJAS, POST_ANADIR_FRANJA])
     def handle_volver_dias(call):
         """Vuelve a la selección de días"""
         chat_id = call.message.chat.id
         
         # Mostrar opciones de días de la semana nuevamente
         markup = types.InlineKeyboardMarkup(row_width=2)
-        dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
-        botones_dias = [types.InlineKeyboardButton(dia, callback_data=f"dia_{dia}") for dia in dias]
+        botones_dias = [types.InlineKeyboardButton(dia, callback_data=f"{DIA}{dia}") for dia in DIAS_SEMANA]
         markup.add(*botones_dias)
-        markup.add(types.InlineKeyboardButton("💾 Guardar horario", callback_data="guardar_horario"))
-        markup.add(types.InlineKeyboardButton("❌ Cancelar", callback_data="cancelar_horario"))
+        markup.add(types.InlineKeyboardButton("💾 Guardar horario", callback_data=GUARDAR_HORARIO))
+        markup.add(types.InlineKeyboardButton("❌ Cancelar", callback_data=CANCELAR_HORARIO))
         
         # Mostrar horario actual si existe
-        if user_data[chat_id]['horario']:
-            horario_formateado = formatear_horario_bonito(user_data[chat_id]['horario'])
+        if user_data[chat_id][USUARIO_HORARIO]:
+            horario_formateado = formatear_horario_bonito(user_data[chat_id][USUARIO_HORARIO])
             mensaje = f"Tu horario actual:\n\n{horario_formateado}\n\nSelecciona un día para configurar:"
         else:
             mensaje = "No tienes un horario configurado. Selecciona un día para comenzar:"
@@ -311,48 +281,51 @@ def register_handlers(bot):
         set_state(chat_id, SELECCIONANDO_DIA)
         bot.answer_callback_query(call.id)
     
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("add_franja_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(ADD_FRANJA))
     def handle_add_franja(call):
         """Maneja la adición de una nueva franja horaria"""
         chat_id = call.message.chat.id
         dia = call.data.split("_")[2]
         
         # Guardar el día actual
-        user_data[chat_id]["dia_actual"] = dia
+        user_data[chat_id][DIA_ACTUAL] = dia
         
         # Solicitar la nueva franja horaria
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        markup.add("🔙 Cancelar")
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(types.InlineKeyboardButton("🔙 Cancelar", callback_data=f"{VOLVER_GESTION}{dia}"))
         
-        bot.send_message(
-            chat_id,
-            f"Introduce la franja horaria para *{dia}* en formato HH:MM-HH:MM\n"
-            "Por ejemplo: 09:00-11:00",
+        bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=call.message.message_id,
+            text=(f"Introduce la franja horaria para *{dia}* en formato HH:MM-HH:MM\n"
+                  "Por ejemplo: 09:00-11:00"),
             reply_markup=markup,
             parse_mode="Markdown"
         )
+
+        user_data[chat_id][MENSAJE_ID] = call.message.message_id
         
         set_state(chat_id, INTRODUCIR_FRANJA)
         bot.answer_callback_query(call.id)
     
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("del_franja_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(DEL_FRANJA))
     def handle_del_franja(call):
         """Maneja la eliminación de una franja horaria"""
         chat_id = call.message.chat.id
         dia = call.data.split("_")[2]
         
         # Verificar que hay franjas para eliminar
-        if dia not in user_data[chat_id]["horario"] or not user_data[chat_id]["horario"][dia]:
+        if dia not in user_data[chat_id][USUARIO_HORARIO] or not user_data[chat_id][USUARIO_HORARIO][dia]:
             bot.answer_callback_query(call.id, text="No hay franjas horarias para eliminar en este día")
             return
         
         # Mostrar botones para seleccionar la franja a eliminar
         markup = types.InlineKeyboardMarkup(row_width=1)
-        for franja in user_data[chat_id]["horario"][dia]:
-            markup.add(types.InlineKeyboardButton(franja, callback_data=f"eliminar_{dia}_{franja}"))
+        for franja in user_data[chat_id][USUARIO_HORARIO][dia]:
+            markup.add(types.InlineKeyboardButton(franja, callback_data=f"{ELIMINAR_FRANJA}{dia}_{franja}"))
         
         # Añadir botón de volver con callback_data específico para este día
-        markup.add(types.InlineKeyboardButton("🔙 Volver", callback_data=f"volver_gestion_{dia}"))
+        markup.add(types.InlineKeyboardButton("🔙 Volver", callback_data=f"{VOLVER_GESTION}{dia}"))
         
         bot.edit_message_text(
             chat_id=chat_id,
@@ -364,15 +337,15 @@ def register_handlers(bot):
         bot.answer_callback_query(call.id)
     
     # Añadir este nuevo handler para manejar el botón volver desde la pantalla de eliminación
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("volver_gestion_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(VOLVER_GESTION))
     def handle_volver_gestion(call):
         """Vuelve a la pantalla de gestión de franjas para un día específico"""
         chat_id = call.message.chat.id
         dia = call.data.split("_")[2]
         
         # Preparar mensaje y opciones para gestionar franjas horarias
-        if dia in user_data[chat_id]["horario"] and user_data[chat_id]["horario"][dia]:
-            franjas = user_data[chat_id]["horario"][dia]
+        if dia in user_data[chat_id][USUARIO_HORARIO] and user_data[chat_id][USUARIO_HORARIO][dia]:
+            franjas = user_data[chat_id][USUARIO_HORARIO][dia]
             franjas_texto = "\n".join([f"• {franja}" for franja in franjas])
             mensaje = f"📅 *{dia}*\n\nFranjas horarias configuradas:\n{franjas_texto}\n\n¿Qué deseas hacer?"
         else:
@@ -381,9 +354,9 @@ def register_handlers(bot):
         # Botones para gestionar franjas
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
-            types.InlineKeyboardButton("➕ Añadir franja horaria", callback_data=f"add_franja_{dia}"),
-            types.InlineKeyboardButton("🗑️ Eliminar franja horaria", callback_data=f"del_franja_{dia}"),
-            types.InlineKeyboardButton("🔙 Volver a selección de días", callback_data="volver_dias")
+            types.InlineKeyboardButton("➕ Añadir franja horaria", callback_data=f"{ADD_FRANJA}{dia}"),
+            types.InlineKeyboardButton("🗑️ Eliminar franja horaria", callback_data=f"{DEL_FRANJA}{dia}"),
+            types.InlineKeyboardButton("🔙 Volver a selección de días", callback_data=VOLVER_DIAS)
         )
         
         bot.edit_message_text(
@@ -396,29 +369,32 @@ def register_handlers(bot):
         set_state(chat_id, GESTION_FRANJAS)
         bot.answer_callback_query(call.id)
     
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("eliminar_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(ELIMINAR_FRANJA))
     def handle_eliminar_franja(call):
         """Elimina una franja horaria específica"""
         chat_id = call.message.chat.id
-        _, dia, hora = call.data.split("_", 2)
+        a1, a2, dia, hora = call.data.split("_", 3)
         
         try:
             # Eliminar la franja seleccionada
-            user_data[chat_id]["horario"][dia].remove(hora)
+            print(user_data[chat_id][USUARIO_HORARIO][dia])
+            user_data[chat_id][USUARIO_HORARIO][dia].remove(hora)
+            print(user_data[chat_id][USUARIO_HORARIO][dia])
             
             # Eliminar el día si no quedan franjas
-            if not user_data[chat_id]["horario"][dia]:
-                del user_data[chat_id]["horario"][dia]
-            
+            if not user_data[chat_id][USUARIO_HORARIO][dia]:
+                del user_data[chat_id][USUARIO_HORARIO][dia]
+
             # Volver al menú de gestión usando la función handle_volver_gestion
             # Creamos un nuevo callback para simular el botón volver
-            new_call = types.CallbackQuery(
+            new_call = telegram.CallbackQuery(
                 id=call.id,
                 from_user=call.from_user,
                 chat_instance=call.chat_instance,
-                data=f"volver_gestion_{dia}",
+                data=f"{VOLVER_GESTION}{dia}",
                 message=call.message
             )
+            
             handle_volver_gestion(new_call)
             
             # Notificar que se eliminó correctamente
@@ -427,19 +403,19 @@ def register_handlers(bot):
             logger.error(f"Error al eliminar franja: {e}")
             bot.answer_callback_query(call.id, text="❌ Error al eliminar la franja")
     
-    @bot.callback_query_handler(func=lambda call: call.data == "guardar_horario")
+    @bot.callback_query_handler(func=lambda call: call.data == GUARDAR_HORARIO)
     def handle_guardar_horario(call):
         """Guarda el horario configurado en la base de datos"""
         chat_id = call.message.chat.id
         
         # Verificar que hay algo para guardar
-        if not user_data[chat_id]["horario"]:
+        if not user_data[chat_id][USUARIO_HORARIO]:
             bot.answer_callback_query(call.id, text="No has configurado ninguna franja horaria")
             return
         
         # Guardar el horario en la base de datos
-        if guardar_horario_bd(chat_id, user_data[chat_id]["horario"]):
-            horario_formateado = formatear_horario_bonito(user_data[chat_id]["horario"])
+        if guardar_horario_bd(chat_id, user_data[chat_id][USUARIO_HORARIO]):
+            horario_formateado = formatear_horario_bonito(user_data[chat_id][USUARIO_HORARIO])
             
             bot.edit_message_text(
                 chat_id=chat_id,
@@ -450,9 +426,9 @@ def register_handlers(bot):
             bot.answer_callback_query(call.id, text="✅ Horario guardado correctamente")
             clear_state(chat_id)  # Limpiar estado para finalizar
         else:
-            bot.answer_callback_query(call.id, text="❌ Error al guardar el horario")
+            bot.answer_callback_query(call.id, text="❌ Error al guardar el horario o no has modificado")
     
-    @bot.callback_query_handler(func=lambda call: call.data == "cancelar_horario")
+    @bot.callback_query_handler(func=lambda call: call.data == CANCELAR_HORARIO)
     def handle_cancelar_horario(call):
         """Cancela la configuración del horario"""
         chat_id = call.message.chat.id
@@ -465,49 +441,25 @@ def register_handlers(bot):
         clear_state(chat_id)
         bot.answer_callback_query(call.id)
     
-    @bot.message_handler(func=lambda m: user_states.get(m.chat.id) == INTRODUCIR_FRANJA)
+    @bot.message_handler(func=lambda m: get_state(m.chat.id) == INTRODUCIR_FRANJA)
     def handle_introducir_franja(message):
         """Procesa la introducción de una nueva franja horaria"""
         chat_id = message.chat.id
         texto = message.text.strip()
-        dia = user_data[chat_id]["dia_actual"]
-        
-        # Cancelar la acción
-        if texto == "🔙 Cancelar":
-            # En lugar de crear manualmente un CallbackQuery, simplemente muestra
-            # de nuevo las opciones del día seleccionado
-            # Preparar mensaje y opciones para gestionar franjas horarias
-            if dia in user_data[chat_id]["horario"] and user_data[chat_id]["horario"][dia]:
-                franjas = user_data[chat_id]["horario"][dia]
-                franjas_texto = "\n".join([f"• {franja}" for franja in franjas])
-                mensaje = f"📅 *{dia}*\n\nFranjas horarias configuradas:\n{franjas_texto}\n\n¿Qué deseas hacer?"
-            else:
-                mensaje = f"📅 *{dia}*\n\nNo hay franjas horarias configuradas para este día.\n\n¿Qué deseas hacer?"
-            
-            # Botones para gestionar franjas
-            markup = types.InlineKeyboardMarkup(row_width=1)
-            markup.add(
-                types.InlineKeyboardButton("➕ Añadir franja horaria", callback_data=f"add_franja_{dia}"),
-                types.InlineKeyboardButton("🗑️ Eliminar franja horaria", callback_data=f"del_franja_{dia}"),
-                types.InlineKeyboardButton("🔙 Volver a selección de días", callback_data="volver_dias")
-            )
-            
-            bot.send_message(
-                chat_id,
-                mensaje,
-                reply_markup=markup,
-                parse_mode="Markdown"
-            )
-            set_state(chat_id, GESTION_FRANJAS)
-            return
+        dia = user_data[chat_id][DIA_ACTUAL]
+        mensaje_id = user_data[chat_id][MENSAJE_ID]
+
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(types.InlineKeyboardButton("🔙 Cancelar", callback_data=f"{VOLVER_GESTION}{dia}"))
         
         # Validar formato de la franja horaria
         if not re.match(r'^\d{1,2}:\d{2}-\d{1,2}:\d{2}$', texto):
-            bot.send_message(
-                chat_id,
-                "⚠️ Formato incorrecto. Usa el formato HH:MM-HH:MM\n"
-                "Ejemplo: 09:00-11:30",
-                reply_markup=types.ReplyKeyboardRemove()
+            bot.edit_message_text(
+                chat_id = chat_id,
+                message_id = mensaje_id,
+                text = "⚠️ Formato incorrecto. Usa el formato HH:MM-HH:MM\n"
+                       "Ejemplo: 09:00-11:30",
+                reply_markup=markup
             )
             return
         
@@ -516,79 +468,80 @@ def register_handlers(bot):
             inicio, fin = texto.split("-")
             hora_inicio, min_inicio = map(int, inicio.split(":"))
             hora_fin, min_fin = map(int, fin.split(":"))
+
+            bot.delete_message(chat_id, message.id)
             
             if not (0 <= hora_inicio <= 23 and 0 <= min_inicio <= 59):
-                bot.send_message(
-                    chat_id,
-                    "⚠️ Hora de inicio inválida. Debe estar entre 00:00 y 23:59.",
-                    reply_markup=types.ReplyKeyboardRemove()
+                bot.edit_message_text(
+                    chat_id = chat_id,
+                    message_id = mensaje_id,
+                    text = "⚠️ Hora de inicio inválida. Debe estar entre 00:00 y 23:59.",
+                    reply_markup=markup
                 )
                 return
                 
             if not (0 <= hora_fin <= 23 and 0 <= min_fin <= 59):
-                bot.send_message(
-                    chat_id,
-                    "⚠️ Hora de fin inválida. Debe estar entre 00:00 y 23:59.",
-                    reply_markup=types.ReplyKeyboardRemove()
+                bot.edit_message_text(
+                    chat_id = chat_id,
+                    message_id = mensaje_id,
+                    text = "⚠️ Hora de fin inválida. Debe estar entre 00:00 y 23:59.",
+                    reply_markup=markup
                 )
                 return
                 
             if (hora_inicio > hora_fin) or (hora_inicio == hora_fin and min_inicio >= min_fin):
-                bot.send_message(
-                    chat_id,
-                    "⚠️ La hora de inicio debe ser anterior a la hora de fin.",
-                    reply_markup=types.ReplyKeyboardRemove()
+                bot.edit_message_text(
+                    chat_id = chat_id,
+                    message_id = mensaje_id,
+                    text = "⚠️ La hora de inicio debe ser anterior a la hora de fin.",
+                    reply_markup=markup
                 )
                 return
 
             # Añadir la franja al día seleccionado
-            if dia not in user_data[chat_id]["horario"]:
-                user_data[chat_id]["horario"][dia] = []
+            if dia not in user_data[chat_id][USUARIO_HORARIO]:
+                user_data[chat_id][USUARIO_HORARIO][dia] = []
                 
             # Verificar que no exista esta franja para este día
-            if texto in user_data[chat_id]["horario"][dia]:
-                bot.send_message(
-                    chat_id,
-                    f"⚠️ Ya tienes configurada la franja {texto} para {dia}.\n"
-                    "Por favor, introduce una franja horaria diferente.",
-                    reply_markup=types.ReplyKeyboardRemove()
+            if texto in user_data[chat_id][USUARIO_HORARIO][dia]:
+                bot.edit_message_text(
+                    chat_id = chat_id,
+                    message_id = mensaje_id,
+                    text = f"⚠️ Ya tienes configurada la franja {texto} para {dia}.\n"
+                            "Por favor, introduce una franja horaria diferente.",
+                    reply_markup=markup
                 )
                 return
             
             # NUEVA VALIDACIÓN: Verificar solapamiento con horarios existentes
-            if hay_solapamiento(user_data[chat_id]["horario"][dia], texto):
-                bot.send_message(
-                    chat_id,
-                    f"⚠️ La franja {texto} se solapa con otro horario existente para {dia}.\n"
-                    "Por favor, introduce una franja horaria que no se solape.",
-                    reply_markup=types.ReplyKeyboardRemove()
+            if hay_solapamiento(user_data[chat_id][USUARIO_HORARIO][dia], texto):
+                bot.edit_message_text(
+                    chat_id = chat_id,
+                    message_id = mensaje_id,
+                    text = f"⚠️ La franja {texto} se solapa con otro horario existente para {dia}.\n"
+                            "Por favor, introduce una franja horaria que no se solape.",
+                    reply_markup=markup
                 )
                 return
         
             # Añadir la franja al horario
-            user_data[chat_id]["horario"][dia].append(texto)
-            
-            # Enviar confirmación y opciones
-            bot.send_message(
-                chat_id,
-                f"✅ Franja {texto} añadida a {dia}",
-                parse_mode="Markdown",
-                reply_markup=types.ReplyKeyboardRemove()
-            )
+            user_data[chat_id][USUARIO_HORARIO][dia].append(texto)
             
             # Opciones post-añadir
             markup = types.InlineKeyboardMarkup(row_width=1)
             markup.add(
-                types.InlineKeyboardButton("➕ Añadir otra franja", callback_data=f"add_franja_{dia}"),
-                types.InlineKeyboardButton("🔙 Volver a selección de días", callback_data="volver_dias"),
-                types.InlineKeyboardButton("💾 Guardar todo el horario", callback_data="guardar_horario")
+                types.InlineKeyboardButton("➕ Añadir otra franja", callback_data=f"{ADD_FRANJA}{dia}"),
+                types.InlineKeyboardButton("🔙 Volver a selección de días", callback_data=VOLVER_DIAS),
+                types.InlineKeyboardButton("💾 Guardar todo el horario", callback_data=GUARDAR_HORARIO)
             )
-            
-            bot.send_message(
-                chat_id,
-                "¿Qué deseas hacer ahora?",
+            bot.edit_message_text(
+                chat_id = chat_id,
+                message_id = mensaje_id,
+                text = f"✅ Franja {texto} añadida a {dia}\n\n"
+                        "¿Qué deseas hacer ahora?",
                 reply_markup=markup
             )
+            
             
             set_state(chat_id, POST_ANADIR_FRANJA)
             
@@ -600,14 +553,14 @@ def register_handlers(bot):
             )
             return
 
-    @bot.message_handler(commands=['ver_horario'])
+    @bot.message_handler(commands=[COMMAND_VER_HORARIO])
     def ver_horario(message):
         """Muestra el horario actual del profesor"""
         chat_id = message.chat.id
         
         # Verificar si es profesor
         try:
-            user = get_user_by_telegram_id(chat_id)
+            user = get_usuarios_local(USUARIO_ID_TELEGRAM=chat_id)
             if not user:
                 bot.send_message(chat_id, "⚠️ No se encontraron tus datos en el sistema.")
                 return
@@ -618,10 +571,10 @@ def register_handlers(bot):
         
         # Obtener el horario de la base de datos
         try:
-            horario_str = user.get('Horario', '')
+            horario_str = user.get(USUARIO_HORARIO, '')
             
             if not horario_str:
-                bot.send_message(chat_id, "No tienes un horario configurado. Usa /configurar_horario para establecerlo.")
+                bot.send_message(chat_id, f"No tienes un horario configurado. Usa /{COMMAND_CONFIGURAR_HORARIO} para establecerlo.")
                 return
             
             # Convertir string a diccionario

@@ -1,10 +1,10 @@
-import telebot
+from collections import defaultdict
 from telebot import types
 import sys
 import os
-import datetime
-import time  # Faltaba esta importación
 import logging  # Para usar logger
+
+from handlers.commands import COMMAND_TUTORIA 
 
 # Importar esta función al principio del archivo
 
@@ -15,47 +15,32 @@ logger = logging.getLogger(__name__)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from db.queries import (
-    get_user_by_telegram_id,
-    get_carreras_by_area,
-    get_matriculas_by_user,
-    get_db_connection,
-    get_matriculas_usuario,
-    get_profesores_asignatura,
-    get_salas_profesor_asignatura
+    get_grupos_tutoria,
+    get_matriculas_asignatura_de_usuario,
+    get_usuarios,
+    get_usuarios_by_multiple_ids_local,
+    get_usuarios_local,
 )
+from db.constantes import *
+from utils.state_manager import user_data
 
-# Añadir la función directamente en este archivo
-def escape_markdown(text: str) -> str:
-    """Escapa caracteres especiales de Markdown para evitar errores de formato"""
-    if not text:
-        return ""
-        
-    # Caracteres que necesitan escape en Markdown
-    markdown_chars = ['_', '*', '`', '[', ']', '(', ')', '#', '+', '-', '.', '!']
-    
-    # Reemplazar cada caracter especial con su versión escapada
-    result = text
-    for char in markdown_chars:
-        result = result.replace(char, '\\' + char)
-        
-    return result
+# Calldata
+SOLICITAR_GRUPO = "solicitar_grupo_"
+APROBAR_TUTORIA = "aprobar_tutoria_"
+RECHAZAR_TUTORIA = "rechazar_tutoria_"
 
 
+#Campos estructuras internas de datos
 
+GENERAL = "general"
 
-
-
-# Referencias externas necesarias
-user_states = {}
-user_data = {}
-estados_timestamp = {}  
 
 def register_handlers(bot):
     """Registra todos los handlers de tutorías"""
     
-    @bot.message_handler(commands=['tutoria'])
+    @bot.message_handler(commands=[COMMAND_TUTORIA])
     def handle_tutoria_command(message):
-        """Muestra profesores y salas disponibles para las asignaturas del estudiante"""
+        """Muestra profesores y grupos disponibles para las asignaturas del estudiante"""
         chat_id = message.chat.id
         user_id = message.from_user.id
         
@@ -63,305 +48,215 @@ def register_handlers(bot):
         print(f"Usuario ID: {user_id}, Chat ID: {chat_id}")
         
         # Obtener información del usuario
-        user = get_user_by_telegram_id(user_id)
+        user = get_usuarios_local(USUARIO_ID_TELEGRAM=user_id)[0]
+        user_data[chat_id] = defaultdict(dict)
         
-        # Diagnóstico: Verificar si hay salas en la base de datos
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        # Diagnóstico: Verificar si hay grupos en la base de datos        
+        # Contar todas las grupos
+        grupos = get_grupos_tutoria()
+        print(f"Total de grupos en la BD: {len(grupos)}")
         
-        # Contar todas las salas
-        cursor.execute("SELECT COUNT(*) as total FROM Grupos_tutoria")
-        total_salas = cursor.fetchone()['total']
-        print(f"Total de salas en la BD: {total_salas}")
-        
-        # Mostrar detalles de algunas salas para diagnóstico
-        if total_salas > 0:
-            cursor.execute("""
-                SELECT 
-                    g.id_sala, g.Id_usuario, g.Nombre_sala, g.Proposito_sala, 
-                    g.Tipo_sala, g.Id_asignatura, a.Nombre as NombreAsignatura
-                FROM Grupos_tutoria g
-                LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-                LIMIT 5
-            """)
-            
-            print("Primeras 5 salas en la BD:")
-            for sala in cursor.fetchall():
-                print(f"  - ID: {sala['id_sala']}, Nombre: {sala['Nombre_sala']}")
-                print(f"    Profesor: {sala['Id_usuario']}, Asignatura: {sala['Id_asignatura']} ({sala['NombreAsignatura']})")
-                print(f"    Tipo: {sala['Tipo_sala']}, Propósito: {sala['Proposito_sala']}")
-                print("    ---")
-        
-        if not user:
-            bot.send_message(chat_id, "❌ No estás registrado. Usa /start para registrarte.")
-            print("❌ Usuario no registrado")
-            return
-        
-        if user['Tipo'] != 'estudiante':
+        if user[USUARIO_TIPO] != USUARIO_TIPO_ESTUDIANTE:
             bot.send_message(chat_id, "⚠️ Esta funcionalidad está disponible solo para estudiantes.")
             print("⚠️ Usuario no es estudiante")
             return
-        
-        print(f"✅ Estudiante: {user['Nombre']} {user['Apellidos'] or ''}")
-        
-        # Obtener las asignaturas del estudiante
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT a.Id_asignatura, a.Nombre as Asignatura
-            FROM Matriculas m
-            JOIN Asignaturas a ON m.Id_asignatura = a.Id_asignatura
-            WHERE m.Id_usuario = ?
-        """, (user['Id_usuario'],))
-        
-        asignaturas = cursor.fetchall()
-        
-        if not asignaturas:
+                
+        # Obtener las asignaturas del estudiante        
+        matriculas = get_matriculas_asignatura_de_usuario(MATRICULA_ID_USUARIO=user[USUARIO_ID], MATRICULA_TIPO=MATRICULA_TODAS)
+        if not matriculas:
             bot.send_message(chat_id, "❌ No estás matriculado en ninguna asignatura.")
-            conn.close()
             print("❌ Estudiante sin asignaturas")
             return
         
-        print(f"✅ Asignaturas encontradas: {len(asignaturas)}")
-        
+        for m in matriculas:
+            user_data[chat_id][m[MATRICULA_ID_USUARIO]][USUARIO_ID] = user[USUARIO_ID]
+            user_data[chat_id][m[MATRICULA_ID_USUARIO]][USUARIO_NOMBRE] = m[MATRICULA_USUARIO_NOMBRE]
+            user_data[chat_id][m[MATRICULA_ID_USUARIO]][USUARIO_APELLIDOS] = m[MATRICULA_USUARIO_APELLIDOS]
+            user_data[chat_id][m[MATRICULA_ID_USUARIO]][USUARIO_EMAIL] = m[MATRICULA_USUARIO_EMAIL]
+            user_data[chat_id][m[MATRICULA_ID_USUARIO]][USUARIO_TIPO] = user[USUARIO_TIPO]
+
+                
         # Obtener IDs de asignaturas para usar en consultas
-        asignaturas_ids = [a['Id_asignatura'] for a in asignaturas]
-        placeholders = ','.join(['?'] * len(asignaturas_ids))
+        profesores_ids = {m[MATRICULA_ID_USUARIO] for m in matriculas if m[MATRICULA_TIPO] == MATRICULA_PROFESOR}
         
-        # Obtener profesores que tienen grupos de tutoría para estas asignaturas
-        # O profesores que son de estas asignaturas según las matrículas (donde son docentes)
-        cursor.execute(f"""
-            SELECT DISTINCT 
-                u.Id_usuario, 
-                u.Nombre, 
-                u.Apellidos, 
-                u.Email_UGR, 
-                u.horario
-            FROM Usuarios u
-            WHERE u.Tipo = 'profesor' 
-            AND (
-                -- Profesores que han creado grupos para estas asignaturas
-                u.Id_usuario IN (
-                    SELECT DISTINCT g.Id_usuario 
-                    FROM Grupos_tutoria g 
-                    WHERE g.Id_asignatura IN ({placeholders})
-                )
-                OR
-                -- O profesores que tienen matrículas como docentes en estas asignaturas
-                u.Id_usuario IN (
-                    SELECT DISTINCT m.Id_usuario 
-                    FROM Matriculas m 
-                    WHERE m.Id_asignatura IN ({placeholders}) AND m.Tipo = 'docente'
-                )
-            )
-            ORDER BY u.Apellidos, u.Nombre
-        """, asignaturas_ids + asignaturas_ids)
-        
-        profesores_raw = cursor.fetchall()
-        print(f"✅ Profesores encontrados: {len(profesores_raw)}")
+        # Obtener profesores que son de estas asignaturas según las matrículas (donde son docentes)
+        profesores_raw = get_usuarios_by_multiple_ids_local(profesores_ids)
+        print(f"✅ Profesores encontrados: {len(profesores_raw)}, ids: {profesores_ids}")
         
         # Convertir a diccionario para facilitar el acceso
         profesores = {}
         for profesor in profesores_raw:
-            prof_id = profesor['Id_usuario']
+            prof_id = profesor[USUARIO_ID]
+            matricula = next(item for item in matriculas 
+                             if int(item[MATRICULA_ID_USUARIO]) == prof_id
+                             and item[MATRICULA_TIPO] == MATRICULA_PROFESOR)
             profesores[prof_id] = {
-                'id': prof_id,
-                'nombre': f"{profesor['Nombre']} {profesor['Apellidos'] or ''}".strip(),
-                'email': profesor['Email_UGR'],
-                'horario': profesor['horario'] or 'No especificado',
-                'asignaturas': {}
+                USUARIO_ID: prof_id,
+                USUARIO_NOMBRE: f"{matricula[MATRICULA_USUARIO_NOMBRE]} {matricula[MATRICULA_USUARIO_APELLIDOS] or ''}".strip(),
+                USUARIO_EMAIL: matricula[MATRICULA_USUARIO_EMAIL],
+                USUARIO_HORARIO: profesor[USUARIO_HORARIO] or 'No especificado',
+                MATRICULAS: {}
             }
         
         # Obtener asignaturas por profesor (basado en matrículas de tipo 'docente' y en grupos creados)
         for profesor_id in profesores:
             # Buscar asignaturas por matrículas donde es docente
-            cursor.execute(f"""
-                SELECT DISTINCT
-                    a.Id_asignatura,
-                    a.Nombre as NombreAsignatura,
-                    a.Codigo_Asignatura as Codigo
-                FROM Matriculas m
-                JOIN Asignaturas a ON m.Id_asignatura = a.Id_asignatura
-                WHERE m.Id_usuario = ? AND m.Tipo = 'docente' AND m.Id_asignatura IN ({placeholders})
-                
-                UNION
-                
-                -- Asignaturas por grupos que ha creado
-                SELECT DISTINCT
-                    a.Id_asignatura,
-                    a.Nombre as NombreAsignatura,
-                    a.Codigo_Asignatura as Codigo
-                FROM Grupos_tutoria g
-                JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-                WHERE g.Id_usuario = ? AND g.Id_asignatura IN ({placeholders})
-            """, [profesor_id] + asignaturas_ids + [profesor_id] + asignaturas_ids)
-            
-            asignaturas_profesor = cursor.fetchall()
-            
+            asignaturas_profesor = [m for m in matriculas if m[MATRICULA_ID_USUARIO] == profesor_id and m[MATRICULA_TIPO] == MATRICULA_PROFESOR]
+
             for asig in asignaturas_profesor:
-                if asig['Id_asignatura'] is not None:  # Si la asignatura existe
-                    profesores[profesor_id]['asignaturas'][asig['Id_asignatura']] = {
-                        'id': asig['Id_asignatura'],
-                        'nombre': asig['NombreAsignatura'],
-                        'codigo': asig['Codigo'],
-                        'salas': []
+                if asig[MATRICULA_ID_ASIGNATURA] is not None:  # Si la asignatura existe
+                    profesores[profesor_id][MATRICULAS][asig[MATRICULA_ID_ASIGNATURA]] = {
+                        ASIGNATURA_ID: asig[MATRICULA_ID_ASIGNATURA],
+                        ASIGNATURA_NOMBRE: asig[MATRICULA_ASIGNATURA_NOMBRE],
+                        ASIGNATURA_NOMBRE_CORTO: asig[MATRICULA_ASIGNATURA_NOMBRE_CORTO],
+                        GRUPOS: []
 
                     }
         
         # Inicializar la categoría general para cada profesor
         for profesor_id in profesores:
-            profesores[profesor_id]['asignaturas']['general'] = {
-                'id': 'general',
-                'nombre': 'General',
-                'salas': []
+            profesores[profesor_id][MATRICULAS][GENERAL] = {
+                ASIGNATURA_ID: GENERAL,
+                ASIGNATURA_NOMBRE: 'General',
+                ASIGNATURA_NOMBRE_CORTO: 'Tutoria',
+                GRUPOS: []
             }
         
-        # Obtener todas las salas de cada profesor
+        # Obtener todas las grupos de cada profesor
         for profesor_id in profesores:
-            cursor.execute("""
-                SELECT 
-                    g.id_sala,
-                    g.Nombre_sala,
-                    g.Proposito_sala,
-                    g.Chat_id,
-                    g.Tipo_sala,
-                    g.Id_asignatura,
-                    g.Enlace_invitacion,
-                    a.Nombre as NombreAsignatura
-                FROM Grupos_tutoria g
-                LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-                WHERE g.Id_usuario = ?
-            """, (profesor_id,))
+            grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=profesor_id)
+            if grupos:
+                print(f"Encontradas {len(grupos)} grupos para el profesor {profesor_id}")
             
-            salas = cursor.fetchall()
-            print(f"Encontradas {len(salas)} salas para el profesor {profesor_id}")
-            
-            # Clasificar las salas por asignatura
-            for sala in salas:
-                sala_data = {
-                    'id': sala['id_sala'],
-                    'nombre': sala['Nombre_sala'],
-                    'proposito': sala['Proposito_sala'],
-                    'tipo': sala['Tipo_sala'],
-                    'enlace': sala['Enlace_invitacion'],
-                    'chat_id': sala['Chat_id'],
-                    'asignatura': sala['NombreAsignatura']
-                }
-                
-                # Asignar la sala a su asignatura correspondiente (o a general si no tiene)
-                if sala['Id_asignatura'] is not None:
-                    asignatura_id = sala['Id_asignatura']
-                    # Verificar que la asignatura existe en el diccionario del profesor
-                    if asignatura_id in profesores[profesor_id]['asignaturas']:
-                        profesores[profesor_id]['asignaturas'][asignatura_id]['salas'].append(sala_data)
-                        print(f"Asignada sala '{sala['Nombre_sala']}' a asignatura ID {asignatura_id}")
-                    else:
-                        # Si por alguna razón la asignatura no está en el diccionario, asignar a general
-                        profesores[profesor_id]['asignaturas']['general']['salas'].append(sala_data)
-                        print(f"Sala '{sala['Nombre_sala']}' asignada a 'general' (asignatura ID {asignatura_id} no encontrada)")
-                else:
-                    # Si la sala no tiene asignatura, agregarla a la categoría "general"
-                    profesores[profesor_id]['asignaturas']['general']['salas'].append(sala_data)
-                    print(f"Sala '{sala['Nombre_sala']}' asignada a 'general' (sin asignatura asociada)")
+                # Clasificar las grupos por asignatura
+                for grupo in grupos:
+                    grupo_data = {                                 
+                        GRUPO_ID: grupo[GRUPO_ID],
+                        GRUPO_NOMBRE: grupo[GRUPO_NOMBRE],
+                        GRUPO_TIPO: grupo[GRUPO_TIPO],
+                        GRUPO_ENLACE: grupo[GRUPO_ENLACE],
+                        GRUPO_ID_CHAT: grupo[GRUPO_ID_CHAT],
+                    }
 
-        conn.close()
+                    # Asignar el grupo a su asignatura correspondiente (o a general si no tiene)
+                    if grupo[GRUPO_ID_ASIGNATURA] is not None:
+                        asignatura_id = grupo[GRUPO_ID_ASIGNATURA]
+                        # Verificar que la asignatura existe en el diccionario del profesor
+                        if asignatura_id in profesores[profesor_id][MATRICULAS]:
+                            profesores[profesor_id][MATRICULAS][asignatura_id][GRUPOS].append(grupo_data)
+                            print(f"Asignado grupo '{grupo[GRUPO_NOMBRE]}' a asignatura ID {asignatura_id}")
+                        else:
+                            # Si por alguna razón la asignatura no está en el diccionario, asignar a general
+                            profesores[profesor_id][MATRICULAS][GENERAL][GRUPOS].append(grupo_data)
+                            print(f"grupo '{grupo[GRUPO_NOMBRE]}' asignada a GENERAL (asignatura ID {asignatura_id} no encontrada)")
+                    else:
+                        # Si el grupo no tiene asignatura, agregarla a la categoría "general"
+                        profesores[profesor_id][MATRICULAS][GENERAL][GRUPOS].append(grupo_data)
+                        print(f"grupo '{grupo[GRUPO_NOMBRE]}' asignada a GENERAL (sin asignatura asociada)")
+
         
         # Si no se encontró ningún profesor, mostrar mensaje y terminar
         if not profesores:
             bot.send_message(chat_id, "❌ No se encontraron profesores para tus asignaturas.")
             return
         
-        # Mejorar la parte que genera el mensaje y muestra las salas
+        # Mejorar la parte que genera el mensaje y muestra las grupos
         for profesor_id, prof_info in profesores.items():
             # Sección del profesor
-            mensaje = f"👨‍🏫 *Profesor: {escape_markdown(prof_info['nombre'])}*\n"
-            mensaje += f"📧 Email: {escape_markdown(prof_info['email'])}\n"
-            mensaje += f"🕗 Horario: {escape_markdown(prof_info['horario'])}\n\n"
+            mensaje = f"👨‍🏫 *Profesor: {prof_info[USUARIO_NOMBRE]}*\n"
+            mensaje += f"📧 Email: {prof_info[USUARIO_EMAIL]}\n"
+            mensaje += f"🕗 Horario:"
+
+            dias = prof_info[USUARIO_HORARIO].split(', ')
+            
+            dia_anterior = ""
+            for dia in dias:
+                dia = dia.split(' ')
+                if dia[0] != dia_anterior:
+                    mensaje += f"\n  -{dia[0]} {dia[1]}"
+                else:
+                    mensaje += f", {dia[1]}"
+                dia_anterior = dia[0]
+                
+
+            mensaje += "\n\n"
             
             markup = types.InlineKeyboardMarkup()  # Crear markup para botones
             
-            # Recopilar todas las salas del profesor desde todas las asignaturas
-            todas_las_salas = []
-            for asignatura_id, asignatura in prof_info['asignaturas'].items():
-                if 'salas' in asignatura:
-                    for sala in asignatura['salas']:
-                        sala['asignatura_id'] = asignatura_id
-                        sala['asignatura_nombre'] = asignatura['nombre']
-                        todas_las_salas.append(sala)
+            # Recopilar todas las grupos del profesor desde todas las asignaturas
+            todas_las_grupos = []
+            for asignatura_id, asignatura in prof_info[MATRICULAS].items():
+                if GRUPOS in asignatura:
+                    for grupo in asignatura[GRUPOS]:
+                        grupo[GRUPO_ID_ASIGNATURA] = asignatura_id
+                        todas_las_grupos.append(grupo)
             
-            print(f"Total salas para profesor {profesor_id}: {len(todas_las_salas)}")
+            print(f"Total grupos para profesor {profesor_id}: {len(todas_las_grupos)}")
             
             # Primero mostrar las asignaturas que imparte
             mensaje += "📚 *Asignaturas:*\n"
             
-            # Variable para controlar si hay salas privadas
-            salas_privadas = []
+            # Variable para controlar si hay grupos privados
+            grupos_privados = []
             
-            for asignatura_id, asignatura in prof_info['asignaturas'].items():
-                if asignatura_id != 'general':  # Solo las asignaturas regulares, no la categoría "general"
-                    nombre = escape_markdown(asignatura['nombre'])
-                    codigo = asignatura.get('codigo', '') or ''
+            for asignatura_id, asignatura in prof_info[MATRICULAS].items():
+                if asignatura_id != GENERAL:  # Solo las asignaturas regulares, no la categoría "general"
                     
-                    # Mostrar información de la asignatura
-                    mensaje += f"• {nombre}"
-                    if codigo:
-                        mensaje += f" ({codigo})"
-                    mensaje += "\n"
+                    mensaje += f"•"
                     
-                    # Filtrar salas para esta asignatura específica
-                    salas_asignatura = [s for s in asignatura.get('salas', []) if s['tipo'].lower() != 'privada']
+                    # Filtrar grupos para esta asignatura específica
+                    grupos_asignatura = [s for s in asignatura.get(GRUPOS, []) if s[GRUPO_TIPO].lower() != GRUPO_PRIVADO]
                     
-                    # Guardar salas privadas para mostrarlas al final
-                    salas_privadas.extend([s for s in asignatura.get('salas', []) if s['tipo'].lower() == 'privada'])
+                    # Guardar grupos privados para mostrarlas al final
+                    grupos_privados.extend([s for s in asignatura.get(GRUPOS, []) if s[GRUPO_TIPO].lower() == GRUPO_PRIVADO])
                     
-                    # Mostrar salas de esta asignatura
-                    if salas_asignatura:
-                        for sala in salas_asignatura:
-                            proposito = sala.get('proposito', '').lower() if sala.get('proposito') else 'general'
-                            nombre_sala = escape_markdown(sala.get('nombre', 'Sala sin nombre'))
+                    # Mostrar grupos de esta asignatura
+                    if grupos_asignatura:
+                        for grupo in grupos_asignatura:
+                            tipo = grupo.get(GRUPO_TIPO, '')
+                            nombre_grupo = grupo.get(GRUPO_NOMBRE, 'grupo sin nombre')
                             
                             # Seleccionar emoji según el propósito
-                            emoji = "📢" if proposito == 'avisos' else "👥" if proposito == 'grupal' else "🔵"
+                            emoji = "📢" if tipo == GRUPO_PUBLICO else "👥" if tipo == GRUPO_PRIVADO else "🔵"
                             
                             # Mostrar como hipervínculo si tiene enlace
-                            if sala.get('enlace'):
-                                mensaje += f"  {emoji} [{nombre_sala}]({sala['enlace']})\n"
+                            if grupo.get(GRUPO_ENLACE):
+                                mensaje += f"  {emoji} [{nombre_grupo}]({grupo[GRUPO_ENLACE]})\n"
                             else:
-                                mensaje += f"  {emoji} {nombre_sala} (sin enlace disponible)\n"
+                                mensaje += f"  {emoji} {nombre_grupo} (sin enlace disponible)\n"
                     else:
-                        mensaje += f"  ℹ️ No hay salas disponibles para esta asignatura\n"
+                        mensaje += f"  ℹ️ No hay grupos disponibles para esta asignatura\n"
                     
                     mensaje += "\n"  # Espacio entre asignaturas
     
-            # Mostrar salas de la categoría "general" si existen
-            salas_generales = prof_info['asignaturas'].get('general', {}).get('salas', [])
-            salas_generales_no_privadas = [s for s in salas_generales if s['tipo'].lower() != 'privada']
+            # Mostrar grupos de la categoría "general" si existen
+            grupos_generales = prof_info[MATRICULAS].get(GENERAL, {}).get(GRUPOS, [])
+            grupos_generales_no_privados = [s for s in grupos_generales if s[GRUPO_TIPO].lower() != GRUPO_PRIVADO]
             
-            # Añadir salas privadas de la categoría general
-            salas_privadas.extend([s for s in salas_generales if s['tipo'].lower() == 'privada'])
+            # Añadir grupos privados de la categoría general
+            grupos_privados.extend([s for s in grupos_generales if s[GRUPO_TIPO].lower() == GRUPO_PRIVADO])
             
-            # Mostrar salas generales si existen
-            if salas_generales_no_privadas:
-                mensaje += "🌐 *Salas Generales:*\n"
-                for sala in salas_generales_no_privadas:
-                    proposito = sala.get('proposito', '').lower() if sala.get('proposito') else 'general'
-                    nombre_sala = escape_markdown(sala.get('nombre', 'Sala sin nombre'))
+            # Mostrar grupos generales si existen
+            if grupos_generales_no_privados:
+                mensaje += "🌐 *grupos Generales:*\n"
+                for grupo in grupos_generales_no_privados:
+                    tipo = grupo.get(GRUPO_TIPO, '')
+                    nombre_grupo = grupo.get(GRUPO_NOMBRE, 'grupo sin nombre')
                     
                     # Seleccionar emoji según el propósito
-                    emoji = "📢" if proposito == 'avisos' else "👥" if proposito == 'grupal' else "🔵"
+                    emoji = "📢" if tipo == GRUPO_PUBLICO else "👥" if tipo == GRUPO_PRIVADO else "🔵"
                     
                     # Mostrar como hipervínculo si tiene enlace
-                    if sala.get('enlace'):
-                        mensaje += f"  {emoji} [{nombre_sala}]({sala['enlace']})\n"
+                    if grupo.get(GRUPO_ENLACE):
+                        mensaje += f"  {emoji} [{nombre_grupo}]({grupo[GRUPO_ENLACE]})\n"
                     else:
-                        mensaje += f"  {emoji} {nombre_sala} (sin enlace disponible)\n"
+                        mensaje += f"  {emoji} {nombre_grupo} (sin enlace disponible)\n"
                 
-                mensaje += "\n"  # Espacio después de salas generales
+                mensaje += "\n"  # Espacio después de grupos generales
             
-            # Mostrar salas privadas separadamente (de todas las asignaturas) si existen
-            if salas_privadas:
-                primera_privada = salas_privadas[0]
+            # Mostrar grupos privados separadamente (de todas las asignaturas) si existen
+            if grupos_privados:
+                primera_privado = grupos_privados[0]
                 mensaje += f"🔐 *Tutoría Privada*\n"
                 
                 # Enviar mensaje primero para que aparezca el texto
@@ -376,8 +271,8 @@ def register_handlers(bot):
                 # Enviar botón en mensaje separado
                 markup = types.InlineKeyboardMarkup()
                 markup.add(types.InlineKeyboardButton(
-                    "🔒 Solicitar acceso a tutoría privada", 
-                    callback_data=f"solicitar_sala_{primera_privada['id']}_{profesor_id}"
+                    "🔒 Solicitar acceso a tutoría privado", 
+                    callback_data=f"{SOLICITAR_GRUPO}{primera_privado[GRUPO_ID]}_{profesor_id}"
                 ))
                 
                 bot.send_message(
@@ -386,7 +281,7 @@ def register_handlers(bot):
                     reply_markup=markup
                 )
             else:
-                # Enviar mensaje solo si hay contenido y no hay salas privadas
+                # Enviar mensaje solo si hay contenido y no hay grupos privados
                 if mensaje.strip():
                     bot.send_message(
                         chat_id,
@@ -397,112 +292,125 @@ def register_handlers(bot):
             
     # Aquí añadimos el resto de handlers para tutorias
     
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("solicitar_sala_"))
-    def handle_solicitar_sala(call):
-        """Gestiona solicitudes de acceso a salas de tutoría privada"""
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(SOLICITAR_GRUPO))
+    def handle_solicitar_grupo(call):
+        """Gestiona solicitudes de acceso a grupos de tutoría privado"""
         chat_id = call.message.chat.id
         user_id = call.from_user.id
         
-        print(f"\n### INICIO SOLICITAR_SALA ###")
+        print(f"\n### INICIO SOLICITAR_GRUPO ###")
         print(f"Chat ID: {chat_id}, User ID: {user_id}")
         print(f"Callback data: {call.data}")
         
         try:
-            # Extraer IDs de la sala y profesor del callback_data
+            # Extraer IDs de el grupo y profesor del callback_data
             # Modificar esta línea para manejar el formato correcto del callback_data
             parts = call.data.split("_")
-            sala_id = int(parts[2])
+            grupo_id = int(parts[2])
             profesor_id = int(parts[3])
-            
+
             # 1. Verificar que el usuario solicitante es un estudiante registrado
-            user = get_user_by_telegram_id(user_id)
+            user = user_data[chat_id][get_usuarios_local(USUARIO_ID_TELEGRAM=user_id)[0][USUARIO_ID]]
             if not user:
                 bot.answer_callback_query(call.id, "❌ No estás registrado en el sistema.")
                 return
                 
-            if user['Tipo'] != 'estudiante':
-                bot.answer_callback_query(call.id, "⚠️ Solo los estudiantes pueden solicitar tutorías privadas.")
+            if user[USUARIO_TIPO] != USUARIO_TIPO_ESTUDIANTE:
+                bot.answer_callback_query(call.id, "⚠️ Solo los estudiantes pueden solicitar tutorías privados.")
                 return
             
-            # 2. Obtener información de la sala y del profesor
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT 
-                    g.*,
-                    u.Nombre as NombreProfesor,
-                    u.Apellidos as ApellidosProfesor,
-                    u.TelegramID as ProfesorTelegramID,
-                    u.Horario as HorarioProfesor,
-                    a.Nombre as NombreAsignatura
-                FROM Grupos_tutoria g
-                JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-                LEFT JOIN Asignaturas a ON g.Id_asignatura = a.Id_asignatura
-                WHERE g.id_sala = ? AND g.Id_usuario = ?
-            """, (sala_id, profesor_id))
             
-            sala = cursor.fetchone()
-            conn.close()
-            
-            if not sala:
-                bot.answer_callback_query(call.id, "❌ No se encontró la sala solicitada.")
+            # 2. Obtener información de el grupo y del profesor            
+            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id)
+            profesor = get_usuarios_local(USUARIO_ID=profesor_id)[0]
+            if not grupo or grupo == []:
+                bot.answer_callback_query(call.id, "❌ No se encontró el grupo solicitada.")
                 return
+            grupo = grupo[0]
                 
             # 3. Verificar si estamos en horario de tutoría del profesor
             print(f"Verificando horario de tutoría para profesor_id={profesor_id}")
-            print(f"Horario del profesor: {sala['HorarioProfesor']}")
+            print(f"Horario del profesor: {profesor[USUARIO_HORARIO]}")
             
-            es_horario_tutoria = verificar_horario_tutoria(sala['HorarioProfesor'])
+            es_horario_tutoria = verificar_horario_tutoria(profesor[USUARIO_HORARIO])
             print(f"¿Está en horario de tutoría? {es_horario_tutoria}")
             
             if not es_horario_tutoria:
                 # No estamos en horario de tutoría
                 bot.answer_callback_query(call.id, "⏰ No es horario de tutoría del profesor.")
+
+                texto = (f"⏰ *No es horario de tutoría*\n\n"
+                        f"El profesor tiene el siguiente horario de tutorías:")
+
+                dias = profesor[USUARIO_HORARIO].split(', ')
+            
+                dia_anterior = ""
+                for dia in dias:
+                    dia = dia.split(' ')
+                    if dia[0] != dia_anterior:
+                        texto += f"\n  -{dia[0]} {dia[1]}"
+                    else:
+                        texto += f", {dia[1]}"
+                    dia_anterior = dia[0]
                 
+                texto += f"\n\nPor favor, intenta solicitar acceso durante estos horarios."
+
                 # Informar al estudiante con más detalle
                 bot.send_message(
                     chat_id,
-                    f"⏰ *No es horario de tutoría*\n\n"
-                    f"El profesor {escape_markdown(sala['NombreProfesor'])} {escape_markdown(sala['ApellidosProfesor'] or '')} "
-                    f"tiene el siguiente horario de tutorías:\n\n"
-                    f"{escape_markdown(sala['HorarioProfesor'])}\n\n"
-                    f"Por favor, intenta solicitar acceso durante estos horarios.",
+                    texto,
                     parse_mode="Markdown"
                 )
                 return
             
-            # 4. Estamos en horario de tutoría, enviar notificación al profesor
-            # Obtener datos del estudiante para la notificación
-            estudiante_nombre = f"{user['Nombre']} {user['Apellidos'] or ''}".strip()
+            estudiante_nombre = f"{user[USUARIO_NOMBRE]} {user[USUARIO_APELLIDOS] or ''}".strip()
+
+            # 4. Comprobamos si esta ocupado, y avisamos si esta
+            if grupo[GRUPO_EN_USO] == True:
+                mensaje_profesor = (
+                    f"🔔 *Solicitud de tutoría privada*\n\n"
+                    f"👤 Estudiante: {estudiante_nombre}\n"
+                    f"📧 Email: {user[USUARIO_EMAIL] or 'No disponible'}\n"
+                    "⚠️⚠️ TU SALA DE TUTORIAS ESTA OCUPADA ⚠️⚠️\n"
+                    "TERMINA LA TUTORIA ACTUAL PARA ACEPTAR MAS"
+                )
+
+                bot.send_message(
+                    chat_id,
+                    "⚠️ El profesor esta ocupado, intentalo de nuevo en unos minutos\n"
+                    "Se ha notificado al profesor.",
+                )
+                bot.send_message(
+                    profesor[USUARIO_ID_TELEGRAM],
+                    mensaje_profesor,
+                )
+                return
             
+            # 5. Esta disponible, enviar notificación al profesor
             # Crear mensaje de notificación para el profesor
             mensaje_profesor = (
                 f"🔔 *Solicitud de tutoría privada*\n\n"
-                f"👤 Estudiante: {escape_markdown(estudiante_nombre)}\n"
-                f"📧 Email: {escape_markdown(user['Email_UGR'] or 'No disponible')}\n"
+                f"👤 Estudiante: {estudiante_nombre}\n"
+                f"📧 Email: {user[USUARIO_EMAIL] or 'No disponible'}\n"
             )
             
-            if sala['NombreAsignatura']:
-                mensaje_profesor += f"📚 Asignatura: {escape_markdown(sala['NombreAsignatura'])}\n"
-            
             mensaje_profesor += (
-                f"\nEl estudiante ha solicitado acceso a tu sala de tutorías privadas."
+                f"\nEl estudiante ha solicitado acceso a tu grupo de tutorías privados."
             )
             
             # Crear botones para que el profesor pueda aprobar o rechazar
             markup_profesor = types.InlineKeyboardMarkup(row_width=2)
             markup_profesor.add(
-                types.InlineKeyboardButton("✅ Aprobar", callback_data=f"aprobar_tutoria_{sala_id}_{user['Id_usuario']}"),
-                types.InlineKeyboardButton("❌ Rechazar", callback_data=f"rechazar_tutoria_{sala_id}_{user['Id_usuario']}")
+                types.InlineKeyboardButton("✅ Aprobar", callback_data=f"{APROBAR_TUTORIA}{grupo_id}_{user[USUARIO_ID]}"),
+                types.InlineKeyboardButton("❌ Rechazar", callback_data=f"{RECHAZAR_TUTORIA}{grupo_id}_{user[USUARIO_ID]}")
             )
             
-            # 5. Generar mensaje de confirmación para el estudiante (sin enviar enlace todavía)
-            if sala['Enlace_invitacion']:
+            # 6. Generar mensaje de confirmación para el estudiante (sin enviar enlace todavía)
+            if grupo[GRUPO_ENLACE]:
                 # Mensaje para el estudiante (solo confirmación de solicitud)
                 mensaje_estudiante = (
                     f"✅ *Solicitud de tutoría enviada*\n\n"
-                    f"Tu solicitud ha sido enviada al profesor "
-                    f"{escape_markdown(sala['NombreProfesor'])} {escape_markdown(sala['ApellidosProfesor'] or '')}.\n\n"
+                    f"Tu solicitud ha sido enviada al profesor.\n\n"
                     f"Recibirás una notificación cuando el profesor responda a tu solicitud."
                 )
                 
@@ -516,15 +424,15 @@ def register_handlers(bot):
                 # Informar que no hay enlace disponible
                 bot.send_message(
                     chat_id,
-                    "⚠️ Esta sala no tiene un enlace de invitación configurado. "
+                    "⚠️ Esta grupo no tiene un enlace de invitación configurado. "
                     "El profesor deberá proporcionarte el acceso manualmente si aprueba tu solicitud.",
                     parse_mode="Markdown"
                 )
-            
+            print("test")
             # 6. Enviar la notificación al profesor
-            if sala['ProfesorTelegramID']:
+            if profesor[USUARIO_ID_TELEGRAM]:
                 bot.send_message(
-                    sala['ProfesorTelegramID'],
+                    profesor[USUARIO_ID_TELEGRAM],
                     mensaje_profesor,
                     parse_mode="Markdown",
                     reply_markup=markup_profesor
@@ -533,24 +441,23 @@ def register_handlers(bot):
                 # El profesor no tiene Telegram registrado
                 bot.send_message(
                     chat_id,
-                    "⚠️ El profesor no tiene cuenta de Telegram registrada. "
-                    "Se enviará tu solicitud por correo electrónico.",
+                    "⚠️ El profesor no tiene cuenta de Telegram registrada",
                     parse_mode="Markdown"
                 )
-                
+            print("test2")
             # Confirmar al usuario que se procesó la solicitud
             bot.answer_callback_query(call.id, "✅ Solicitud enviada correctamente")
             
         except Exception as e:
-            logger.error(f"Error al procesar solicitud de sala: {e}")
+            logger.error(f"Error al procesar solicitud de grupo: {e}")
             bot.answer_callback_query(call.id, "❌ Ha ocurrido un error al procesar tu solicitud.")
             bot.send_message(chat_id, "Lo sentimos, ha ocurrido un error al procesar tu solicitud de tutoría.")
         
-        print("### FIN SOLICITAR_SALA ###\n")
+        print("### FIN SOLICITAR_grupo ###\n")
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("aprobar_tutoria_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(APROBAR_TUTORIA))
     def handle_aprobar_tutoria(call):
-        """Maneja la aprobación de una solicitud de tutoría privada"""
+        """Maneja la aprobación de una solicitud de tutoría privado"""
         chat_id = call.message.chat.id
         user_id = call.from_user.id
         
@@ -565,105 +472,62 @@ def register_handlers(bot):
                 bot.answer_callback_query(call.id, "❌ Formato de solicitud incorrecto.")
                 return
                 
-            sala_id = int(parts[2])
+            grupo_id = int(parts[2])
             estudiante_id = int(parts[3])
             
-            # 1. Verificar que el usuario que aprueba es el profesor propietario de la sala
-            profesor = get_user_by_telegram_id(user_id)
-            if not profesor or profesor['Tipo'] != 'profesor':
+            # 1. Verificar que el usuario que aprueba es el profesor propietario de el grupo
+            profesor = get_usuarios_local(USUARIO_ID_TELEGRAM=user_id)
+            if not profesor or profesor[0][USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
                 bot.answer_callback_query(call.id, "⚠️ Solo el profesor propietario puede aprobar solicitudes.")
                 return
+            profesor = profesor[0]
             
-            # 2. Obtener información de la sala y del estudiante
-            conn = get_db_connection()
-            cursor = conn.cursor()
+            # 2. Obtener información de el grupo y del estudiante       
+            # Verificar que el grupo pertenece al profesor
+            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_PROFESOR=profesor[USUARIO_ID])[0]
             
-            # Verificar que la sala pertenece al profesor
-            cursor.execute("""
-                SELECT g.*, u.Nombre as NombreProfesor, u.Apellidos as ApellidosProfesor
-                FROM Grupos_tutoria g
-                JOIN Usuarios u ON g.Id_usuario = u.Id_usuario
-                WHERE g.id_sala = ? AND g.Id_usuario = (
-                    SELECT Id_usuario FROM Usuarios WHERE TelegramID = ?
-                )
-            """, (sala_id, user_id))
-            
-            sala = cursor.fetchone()
-            
-            if not sala:
-                bot.answer_callback_query(call.id, "❌ No tienes permisos para esta sala o no existe.")
-                conn.close()
+            if not grupo:
+                bot.answer_callback_query(call.id, "❌ No tienes permisos para esta grupo o no existe.")
                 return
             
             # 3. Obtener información del estudiante
-            cursor.execute("""
-                SELECT * 
-                FROM Usuarios 
-                WHERE Id_usuario = ? AND Tipo = 'estudiante'
-            """, (estudiante_id,))
-            
-            estudiante = cursor.fetchone()
-            
+            estudiante = get_usuarios(USUARIO_ID=estudiante_id)
             if not estudiante:
                 bot.answer_callback_query(call.id, "❌ No se encontró al estudiante.")
-                conn.close()
                 return
-            
-            # 4. Verificar si el estudiante ya es miembro de la sala
-            cursor.execute("""
-                SELECT * FROM Miembros_Grupo 
-                WHERE id_sala = ? AND Id_usuario = ?
-            """, (sala_id, estudiante_id))
-            
-            miembro_existente = cursor.fetchone()
-            
-            if miembro_existente:
-                # Actualizar estado a activo si estaba inactivo
-                cursor.execute("""
-                    UPDATE Miembros_Grupo 
-                    SET Estado = 'activo' 
-                    WHERE id_sala = ? AND Id_usuario = ?
-                """, (sala_id, estudiante_id))
-            else:
-                # Añadir al estudiante como miembro de la sala
-                cursor.execute("""
-                    INSERT INTO Miembros_Grupo (id_sala, Id_usuario, Estado)
-                    VALUES (?, ?, 'activo')
-                """, (sala_id, estudiante_id))
+            estudiante = estudiante[0]
         
-            conn.commit()
             
             # 5. Enviar enlace de invitación al estudiante
-            if sala['Enlace_invitacion'] and estudiante['TelegramID']:
+            if grupo[GRUPO_ENLACE] and estudiante[USUARIO_ID_TELEGRAM]:
                 mensaje_estudiante = (
                     f"✅ *Tu solicitud de tutoría ha sido aprobada*\n\n"
-                    f"El profesor {escape_markdown(profesor['Nombre'])} {escape_markdown(profesor['Apellidos'] or '')} "
-                    f"ha aprobado tu solicitud de acceso a la sala de tutorías.\n\n"
-                    f"Usa este enlace para unirte al grupo: {sala['Enlace_invitacion']}"
+                    f"El profesor ha aprobado tu solicitud de acceso a el grupo de tutorías.\n\n"
+                    f"Usa este enlace para unirte al grupo: {grupo[GRUPO_ENLACE].replace("_","\_")}"
                 )
                 
                 bot.send_message(
-                    estudiante['TelegramID'],
+                    estudiante[USUARIO_ID_TELEGRAM],
                     mensaje_estudiante,
                     parse_mode="Markdown"
                 )
-                print(f"✅ Enlace de invitación enviado al estudiante {estudiante['Id_usuario']}")
+                print(f"✅ Enlace de invitación enviado al estudiante {estudiante[USUARIO_ID]}")
             else:
                 # Si no hay enlace o ID de Telegram
                 bot.send_message(
                     chat_id,
-                    f"⚠️ No se pudo enviar el enlace de invitación a {estudiante['Nombre']} {estudiante['Apellidos'] or ''}.\n"
-                    f"Verifique que la sala tenga un enlace de invitación configurado."
+                    f"⚠️ No se pudo enviar el enlace de invitación a {estudiante[USUARIO_NOMBRE]} {estudiante[USUARIO_APELLIDOS] or ''}.\n"
+                    f"Verifique que el grupo tenga un enlace de invitación configurado."
                 )
         
             # 6. Actualizar el mensaje de solicitud para mostrar que fue aprobada
-            nombre_completo = f"{estudiante['Nombre']} {estudiante['Apellidos'] or ''}".strip()
+            nombre_completo = f"{estudiante[USUARIO_NOMBRE]} {estudiante[USUARIO_APELLIDOS] or ''}".strip()
             
             mensaje_actualizado = (
                 f"✅ *Solicitud APROBADA*\n\n"
-                f"👤 Estudiante: {escape_markdown(nombre_completo)}\n"
-                f"📧 Email: {escape_markdown(estudiante['Email_UGR'] or 'No disponible')}\n\n"
-                f"Acceso concedido a la sala: {escape_markdown(sala['Nombre_sala'])}"
+                f"👤 Estudiante: {nombre_completo}\n"
+                f"📧 Email: {estudiante[USUARIO_EMAIL] or 'No disponible'}\n\n"
+                f"Acceso concedido a el grupo: {grupo[GRUPO_NOMBRE]}"
             )
             
             # Eliminar los botones de aprobar/rechazar
@@ -676,7 +540,7 @@ def register_handlers(bot):
             
             bot.answer_callback_query(call.id, "✅ Solicitud aprobada con éxito")
             
-            print(f"✅ Solicitud de tutoría aprobada: Estudiante {estudiante_id} añadido a sala {sala_id}")
+            print(f"✅ Solicitud de tutoría aprobada: Estudiante {estudiante_id} añadido a grupo {grupo_id}")
             
         except Exception as e:
             print(f"❌ Error al aprobar solicitud: {e}")
@@ -686,9 +550,9 @@ def register_handlers(bot):
     
         print("### FIN APROBAR_TUTORIA ###\n")
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("rechazar_tutoria_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(RECHAZAR_TUTORIA))
     def handle_rechazar_tutoria(call):
-        """Maneja el rechazo de una solicitud de tutoría privada"""
+        """Maneja el rechazo de una solicitud de tutoría privado"""
         chat_id = call.message.chat.id
         user_id = call.from_user.id
         
@@ -698,49 +562,41 @@ def register_handlers(bot):
         
         try:
             # Extraer los IDs necesarios del callback_data
-            # Formato: rechazar_tutoria_sala_estudiante
+            # Formato: rechazar_tutoria_grupo_estudiante
             parts = call.data.split("_")
             if len(parts) < 4:
                 bot.answer_callback_query(call.id, "❌ Formato de solicitud incorrecto.")
                 return
                 
-            sala_id = int(parts[2])
+            grupo_id = int(parts[2])
             estudiante_id = int(parts[3])
             
-            # Verificar que el usuario que rechaza es el profesor propietario de la sala
-            profesor = get_user_by_telegram_id(user_id)
-            if not profesor or profesor['Tipo'] != 'profesor':
+            # Verificar que el usuario que rechaza es el profesor propietario de el grupo
+            profesor = get_usuarios_local(USUARIO_ID_TELEGRAM=user_id)
+            if not profesor or profesor[0][USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
                 bot.answer_callback_query(call.id, "⚠️ Solo el profesor propietario puede rechazar solicitudes.")
                 return
+            profesor = profesor[0]
             
-            # Obtener información del estudiante y la sala
-            conn = get_db_connection()
-            cursor = conn.cursor()
+            # Obtener información del estudiante y el grupo            
+            estudiante = get_usuarios(USUARIO_ID=estudiante_id)
             
-            cursor.execute("""
-                SELECT * FROM Usuarios WHERE Id_usuario = ?
-            """, (estudiante_id,))
-            estudiante = cursor.fetchone()
+            grupo = get_grupos_tutoria(GRUPO_ID=grupo_id)
             
-            cursor.execute("""
-                SELECT * FROM Grupos_tutoria WHERE id_sala = ?
-            """, (sala_id,))
-            sala = cursor.fetchone()
-            
-            conn.close()
-            
-            if not estudiante or not sala:
+            if not estudiante or not grupo:
                 bot.answer_callback_query(call.id, "❌ Datos de solicitud no encontrados.")
                 return
+            estudiante = estudiante[0]
+            grupo = grupo[0]
             
             # Actualizar el mensaje para mostrar que fue rechazada
-            nombre_completo = f"{estudiante['Nombre']} {estudiante['Apellidos'] or ''}".strip()
+            nombre_completo = f"{estudiante[USUARIO_NOMBRE]} {estudiante[USUARIO_APELLIDOS] or ''}".strip()
             
             mensaje_actualizado = (
                 f"❌ *Solicitud RECHAZADA*\n\n"
-                f"👤 Estudiante: {escape_markdown(nombre_completo)}\n"
-                f"📧 Email: {escape_markdown(estudiante['Email_UGR'] or 'No disponible')}\n\n"
-                f"Acceso denegado a la sala: {escape_markdown(sala['Nombre_sala'])}"
+                f"👤 Estudiante: {nombre_completo}\n"
+                f"📧 Email: {estudiante[USUARIO_EMAIL] or 'No disponible'}\n\n"
+                f"Acceso denegado a el grupo: {grupo[GRUPO_NOMBRE]}"
             )
             
             # Eliminar los botones de aprobar/rechazar
@@ -752,16 +608,15 @@ def register_handlers(bot):
             )
             
             # Notificar al estudiante si tiene Telegram registrado
-            if estudiante['TelegramID']:
+            if estudiante[USUARIO_ID_TELEGRAM]:
                 mensaje_rechazo = (
                     f"❌ *Tu solicitud de tutoría ha sido rechazada*\n\n"
-                    f"El profesor {escape_markdown(profesor['Nombre'])} {escape_markdown(profesor['Apellidos'] or '')} "
-                    f"ha rechazado tu solicitud de acceso a la sala de tutorías.\n\n"
+                    f"El profesor ha rechazado tu solicitud de acceso a el grupo de tutorías.\n\n"
                     f"Si necesitas más información, contacta directamente con el profesor."
                 )
                 
                 bot.send_message(
-                    estudiante['TelegramID'],
+                    estudiante[USUARIO_ID_TELEGRAM],
                     mensaje_rechazo,
                     parse_mode="Markdown"
                 )
@@ -904,48 +759,3 @@ def verificar_horario_tutoria(horario_str):
         print(f"No se encontraron horarios para el día actual ({ahora.strftime('%A')})")
     
     return False
-
-
-def registrar_solicitud_tutoria(estudiante_id, profesor_id, sala_id):
-    """
-    Registra una solicitud de tutoría en la base de datos
-    
-    Args:
-        estudiante_id (int): ID del estudiante que solicita
-        profesor_id (int): ID del profesor
-        sala_id (int): ID de la sala solicitada
-    """
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Verificar si ya existe un registro de este estudiante en esta sala
-        cursor.execute(
-            "SELECT id_miembro FROM Miembros_Grupo WHERE id_sala = ? AND Id_usuario = ?",
-            (sala_id, estudiante_id)
-        )
-        
-        miembro = cursor.fetchone()
-        
-        if miembro:
-            # Si ya existe, actualizar su estado a activo si no lo está
-            cursor.execute(
-                "UPDATE Miembros_Grupo SET Estado = 'activo' WHERE id_miembro = ?",
-                (miembro['id_miembro'],)
-            )
-        else:
-            # Si no existe, crear un nuevo registro
-            cursor.execute(
-                """
-                INSERT INTO Miembros_Grupo (id_sala, Id_usuario, Estado)
-                VALUES (?, ?, 'pendiente')
-                """,
-                (sala_id, estudiante_id)
-            )
-        
-        conn.commit()
-        conn.close()
-        print(f"✅ Solicitud registrada: Estudiante {estudiante_id} para sala {sala_id}")
-        
-    except Exception as e:
-        print(f"❌ Error al registrar solicitud de tutoría: {e}")
