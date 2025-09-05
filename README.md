@@ -76,3 +76,4 @@ Este proyecto está bajo **MIT License**. Consulta el archivo `LICENSE`.
 
 **Créditos**:
 Alberto Velasco Fuentes
+Germán López Pérez

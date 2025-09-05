@@ -138,7 +138,7 @@ def register_handlers(bot):
                         GRUPO_ID_CHAT: grupo[GRUPO_ID_CHAT],
                     }
 
-                    # Asignar la grupo a su asignatura correspondiente (o a general si no tiene)
+                    # Asignar el grupo a su asignatura correspondiente (o a general si no tiene)
                     if grupo[GRUPO_ID_ASIGNATURA] is not None:
                         asignatura_id = grupo[GRUPO_ID_ASIGNATURA]
                         # Verificar que la asignatura existe en el diccionario del profesor
@@ -150,7 +150,7 @@ def register_handlers(bot):
                             profesores[profesor_id][MATRICULAS][GENERAL][GRUPOS].append(grupo_data)
                             print(f"grupo '{grupo[GRUPO_NOMBRE]}' asignada a GENERAL (asignatura ID {asignatura_id} no encontrada)")
                     else:
-                        # Si la grupo no tiene asignatura, agregarla a la categoría "general"
+                        # Si el grupo no tiene asignatura, agregarla a la categoría "general"
                         profesores[profesor_id][MATRICULAS][GENERAL][GRUPOS].append(grupo_data)
                         print(f"grupo '{grupo[GRUPO_NOMBRE]}' asignada a GENERAL (sin asignatura asociada)")
 
@@ -303,7 +303,7 @@ def register_handlers(bot):
         print(f"Callback data: {call.data}")
         
         try:
-            # Extraer IDs de la grupo y profesor del callback_data
+            # Extraer IDs de el grupo y profesor del callback_data
             # Modificar esta línea para manejar el formato correcto del callback_data
             parts = call.data.split("_")
             grupo_id = int(parts[2])
@@ -324,7 +324,7 @@ def register_handlers(bot):
             grupo = get_grupos_tutoria(GRUPO_ID=grupo_id)
             profesor = get_usuarios_local(USUARIO_ID=profesor_id)[0]
             if not grupo or grupo == []:
-                bot.answer_callback_query(call.id, "❌ No se encontró la grupo solicitada.")
+                bot.answer_callback_query(call.id, "❌ No se encontró el grupo solicitada.")
                 return
             grupo = grupo[0]
                 
@@ -475,15 +475,15 @@ def register_handlers(bot):
             grupo_id = int(parts[2])
             estudiante_id = int(parts[3])
             
-            # 1. Verificar que el usuario que aprueba es el profesor propietario de la grupo
+            # 1. Verificar que el usuario que aprueba es el profesor propietario de el grupo
             profesor = get_usuarios_local(USUARIO_ID_TELEGRAM=user_id)
             if not profesor or profesor[0][USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
                 bot.answer_callback_query(call.id, "⚠️ Solo el profesor propietario puede aprobar solicitudes.")
                 return
             profesor = profesor[0]
             
-            # 2. Obtener información de la grupo y del estudiante       
-            # Verificar que la grupo pertenece al profesor
+            # 2. Obtener información de el grupo y del estudiante       
+            # Verificar que el grupo pertenece al profesor
             grupo = get_grupos_tutoria(GRUPO_ID=grupo_id, GRUPO_ID_PROFESOR=profesor[USUARIO_ID])[0]
             
             if not grupo:
@@ -502,7 +502,7 @@ def register_handlers(bot):
             if grupo[GRUPO_ENLACE] and estudiante[USUARIO_ID_TELEGRAM]:
                 mensaje_estudiante = (
                     f"✅ *Tu solicitud de tutoría ha sido aprobada*\n\n"
-                    f"El profesor ha aprobado tu solicitud de acceso a la grupo de tutorías.\n\n"
+                    f"El profesor ha aprobado tu solicitud de acceso a el grupo de tutorías.\n\n"
                     f"Usa este enlace para unirte al grupo: {grupo[GRUPO_ENLACE].replace("_","\_")}"
                 )
                 
@@ -517,7 +517,7 @@ def register_handlers(bot):
                 bot.send_message(
                     chat_id,
                     f"⚠️ No se pudo enviar el enlace de invitación a {estudiante[USUARIO_NOMBRE]} {estudiante[USUARIO_APELLIDOS] or ''}.\n"
-                    f"Verifique que la grupo tenga un enlace de invitación configurado."
+                    f"Verifique que el grupo tenga un enlace de invitación configurado."
                 )
         
             # 6. Actualizar el mensaje de solicitud para mostrar que fue aprobada
@@ -527,7 +527,7 @@ def register_handlers(bot):
                 f"✅ *Solicitud APROBADA*\n\n"
                 f"👤 Estudiante: {nombre_completo}\n"
                 f"📧 Email: {estudiante[USUARIO_EMAIL] or 'No disponible'}\n\n"
-                f"Acceso concedido a la grupo: {grupo[GRUPO_NOMBRE]}"
+                f"Acceso concedido a el grupo: {grupo[GRUPO_NOMBRE]}"
             )
             
             # Eliminar los botones de aprobar/rechazar
@@ -571,14 +571,14 @@ def register_handlers(bot):
             grupo_id = int(parts[2])
             estudiante_id = int(parts[3])
             
-            # Verificar que el usuario que rechaza es el profesor propietario de la grupo
+            # Verificar que el usuario que rechaza es el profesor propietario de el grupo
             profesor = get_usuarios_local(USUARIO_ID_TELEGRAM=user_id)
             if not profesor or profesor[0][USUARIO_TIPO] != USUARIO_TIPO_PROFESOR:
                 bot.answer_callback_query(call.id, "⚠️ Solo el profesor propietario puede rechazar solicitudes.")
                 return
             profesor = profesor[0]
             
-            # Obtener información del estudiante y la grupo            
+            # Obtener información del estudiante y el grupo            
             estudiante = get_usuarios(USUARIO_ID=estudiante_id)
             
             grupo = get_grupos_tutoria(GRUPO_ID=grupo_id)
@@ -596,7 +596,7 @@ def register_handlers(bot):
                 f"❌ *Solicitud RECHAZADA*\n\n"
                 f"👤 Estudiante: {nombre_completo}\n"
                 f"📧 Email: {estudiante[USUARIO_EMAIL] or 'No disponible'}\n\n"
-                f"Acceso denegado a la grupo: {grupo[GRUPO_NOMBRE]}"
+                f"Acceso denegado a el grupo: {grupo[GRUPO_NOMBRE]}"
             )
             
             # Eliminar los botones de aprobar/rechazar
@@ -611,7 +611,7 @@ def register_handlers(bot):
             if estudiante[USUARIO_ID_TELEGRAM]:
                 mensaje_rechazo = (
                     f"❌ *Tu solicitud de tutoría ha sido rechazada*\n\n"
-                    f"El profesor ha rechazado tu solicitud de acceso a la grupo de tutorías.\n\n"
+                    f"El profesor ha rechazado tu solicitud de acceso a el grupo de tutorías.\n\n"
                     f"Si necesitas más información, contacta directamente con el profesor."
                 )
                 
