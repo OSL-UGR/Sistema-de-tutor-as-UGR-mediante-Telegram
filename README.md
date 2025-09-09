@@ -34,15 +34,15 @@
 5. Configura variables de entorno copiando `datos.env.example` a `datos.env` y completando los valores.
 6. Inicia el bot con:
    ```bash
-   python main
-   python main_grupo
+   python main.py
+   python main_grupo.py
    ```
 
 ---
 
 ## Uso
 
-### Iniciar bot de registro
+### Iniciar bot principal
 
 ```bash
 python main.py
@@ -74,6 +74,6 @@ Agregar el bot como admin en un grupo para habilitar la configuración.
 
 Este proyecto está bajo **MIT License**. Consulta el archivo `LICENSE`.
 
-**Créditos**:
-Alberto Velasco Fuentes
-Germán López Pérez
+**Créditos**:<br>
+Alberto Velasco Fuentes<br>
+Germán López Pérez<br>

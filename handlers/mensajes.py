@@ -2,7 +2,6 @@ from collections import defaultdict
 import os
 import logging
 import dict2xml
-from pyparsing import Dict
 from telebot import types
 
 from handlers.commands import COMMAND_VER_MENSAJES, COMMAND_VER_REACCIONES
