@@ -180,79 +180,6 @@ def get_usuarios(**kwargs):
         rollback()
         return None
 
-    
-def get_usuarios_by_multiple_ids(usuarios_ids):
-    """Obtiene usuarios desde Moodle, complementando con datos locales a partir de una lista de IDs"""
-    if not usuarios_ids:
-        return []
-
-    cursor = get_cursor()
-
-    try:
-        # Paso 1: Obtener emails y datos locales de la BD
-        placeholders = ",".join([PLACEHOLDER for _ in usuarios_ids])
-        query = f"SELECT * FROM {USUARIOS} WHERE {USUARIO_ID} IN ({placeholders})"
-        cursor.execute(query, list(usuarios_ids))
-        rows = cursor.fetchall()
-
-        # Mapear usuario_id → info local
-        local_data = {}
-        ids_moodle = []
-        for row in rows:
-            row_dict = dict(row)
-            usuario_id = row_dict[USUARIO_ID]
-            ids_moodle.append(row_dict[USUARIO_ID_MOODLE])
-            local_data[usuario_id] = {
-                USUARIO_ID: usuario_id,
-                USUARIO_ID_MOODLE: row_dict[USUARIO_ID_MOODLE],
-                USUARIO_ID_TELEGRAM: row_dict[USUARIO_ID_TELEGRAM],
-                USUARIO_TIPO: row_dict[USUARIO_TIPO],
-                USUARIO_HORARIO: row_dict[USUARIO_HORARIO],
-            }
-
-        if not ids_moodle:
-            return []
-        
-        # Paso 2: Consultar Moodle para los emails obtenidos
-        results = []
-        for i, id in enumerate(ids_moodle):
-            # Moodle no permite múltiples criteria a la vez con la misma clave para usuarios,
-            # así que usamos múltiples peticiones (muy lento).
-            payload = {
-                'wstoken': MOODLE_TOKEN,
-                'wsfunction': 'core_user_get_users',
-                'moodlewsrestformat': 'json',
-                f'criteria[0][key]': 'id',
-                f'criteria[0][value]': id,
-            }
-
-            url = f"{MOODLE_ADDRESS}/webservice/rest/server.php"
-            response = requests.post(url, params=payload)
-            if response.ok:
-                users = response.json().get("users", [])
-                for user in users:
-                    moodle_id = user.get("id")
-                    local = local_data.get(moodle_id, {})
-                    results.append({
-                        USUARIO_ID: local.get(USUARIO_ID),
-                        USUARIO_ID_MOODLE: moodle_id,
-                        USUARIO_NOMBRE: user.get("firstname"),
-                        USUARIO_APELLIDOS: user.get("lastname"),
-                        USUARIO_EMAIL: user.get("email"),
-                        USUARIO_TIPO: local.get(USUARIO_TIPO, 'student'),
-                        USUARIO_ID_TELEGRAM: local.get(USUARIO_ID_TELEGRAM),
-                        USUARIO_HORARIO: local.get(USUARIO_HORARIO),
-                        })
-            else:
-                logging.getLogger("moodle").error(f"Error al consultar Moodle para id {id}: {response.status_code} - {response.text}")
-
-        # Ordenar por nombre y apellidos como hacía el original
-        return sorted(results, key=lambda u: (u.get(USUARIO_NOMBRE) or '', u.get(USUARIO_APELLIDOS) or ''))
-
-    except Exception as e:
-        logging.getLogger("db.queries").error(f"Error al obtener usuarios por IDs: {e}")
-        return []
-
 def get_usuarios_by_multiple_ids_local(usuarios_ids):
     """Obtiene usuarios desde Moodle, complementando con datos locales a partir de una lista de IDs"""
     if not usuarios_ids:
@@ -368,7 +295,6 @@ def create_grupo_tutoria(usuario_id, nombre, tipo, asignatura_id, chat_id = None
         rollback()
         return None
 
-##No se usa    
 def update_grupo_tutoria(grupo_id, do_commit=True, **kwargs):
     """Actualiza los datos de una grupo de tutoría"""
     if not all(k in GRUPO_CAMPOS_VALIDOS for k in kwargs):
@@ -733,6 +659,7 @@ def insert_mensaje(telegram_id, chat_id, sender_id, profesor_id, asignatura_id, 
         rollback()
         return None
 
+# No se usa
 def update_mensaje(mensaje_id, do_commit=True, **kwargs):
     if not all(k in MENSAJE_CAMPOS_VALIDOS for k in kwargs):
         raise ValueError("Campo inválido en la actualización de mensaje")
@@ -752,6 +679,7 @@ def update_mensaje(mensaje_id, do_commit=True, **kwargs):
         rollback()
         return False
 
+# No se usa
 def delete_mensaje(mensaje_id):
     cursor = get_cursor()
     try:
