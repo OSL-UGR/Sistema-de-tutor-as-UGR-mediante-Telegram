@@ -10,6 +10,7 @@
    git clone https://github.com/Velasco-A/Velasco-A-Sistema-de-mensajeria-para-tutorias-UGR.git
    cd Velasco-A-Sistema-de-mensajeria-para-tutorias-UGR
    ```
+
 2. Crea y activa un entorno virtual:
 
    ```bash
@@ -17,25 +18,27 @@
    source .venv/bin/activate  # Linux/Mac
    .\.venv\Scripts\activate   # Windows
    ```
+
 3. Instala dependencias:
 
    ```bash
    pip install -r requirements.txt
    ```
-   
 
 4. Crea una base de datos con el charset utf8mb4:
 
    En mariaDB seria de la forma:
+
    ```sql
    CREATE DATABASE {DATABASE_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
    ```
 
 5. Configura variables de entorno copiando `datos.env.example` a `datos.env` y completando los valores.
 6. Inicia el bot con:
+
    ```bash
-   python main.py
-   python main_grupo.py
+   python3 main.py
+   python3 main_grupo.py
    ```
 
 ---
@@ -74,6 +77,6 @@ Agregar el bot como admin en un grupo para habilitar la configuración.
 
 Este proyecto está bajo **MIT License**. Consulta el archivo `LICENSE`.
 
-**Créditos**:<br>
-Alberto Velasco Fuentes<br>
-Germán López Pérez<br>
+**Créditos**:\
+Alberto Velasco Fuentes\
+Germán López Pérez
