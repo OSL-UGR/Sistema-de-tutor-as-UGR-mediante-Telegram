@@ -1,7 +1,6 @@
-from collections import defaultdict
 import requests
 import logging
-from config import MOODLE_ADDRESS, MOODLE_TOKEN
+from config import MOODLE_URL, MOODLE_TOKEN
 from db import get_cursor, commit, rollback
 from db.constantes import *
 
@@ -98,7 +97,7 @@ def get_usuarios(**kwargs):
                 'criteria[0][key]': 'id',
                 'criteria[0][value]': moodle_id,
             }
-            url = f"{MOODLE_ADDRESS}/webservice/rest/server.php"
+            url = f"{MOODLE_URL}/webservice/rest/server.php"
             response = requests.post(url, params=payload)
 
             if response.ok:
@@ -139,7 +138,7 @@ def get_usuarios(**kwargs):
             }
             payload.update(dict(criteria))
 
-            url = f"{MOODLE_ADDRESS}/webservice/rest/server.php"
+            url = f"{MOODLE_URL}/webservice/rest/server.php"
             response = requests.post(url, params=payload)
 
             if response.ok:
@@ -250,7 +249,7 @@ def get_asignaturas(**kwargs):
             "value": valor
         }
 
-        url = f"{MOODLE_ADDRESS}/webservice/rest/server.php"
+        url = f"{MOODLE_URL}/webservice/rest/server.php"
         response = requests.post(url, params=payload)
 
         if response.ok:
@@ -374,7 +373,7 @@ def get_matriculas_asignatura_de_usuario(**kwargs):
         if not (usuario_id or asignatura_id):
             raise ValueError("Se requiere al menos 'usuario_id' o 'asignatura_id'")
 
-        url = f"{MOODLE_ADDRESS}/webservice/rest/server.php"
+        url = f"{MOODLE_URL}/webservice/rest/server.php"
         token = MOODLE_TOKEN
 
         results = []

@@ -33,12 +33,32 @@
    CREATE DATABASE {DATABASE_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
    ```
 
-5. Configura variables de entorno copiando `datos.env.example` a `datos.env` y completando los valores.
-6. Inicia el bot con:
+5. Crear un servicio externo en Moodle
+   - En la admnistracion del sitio Moodle vaya a la sección de servicios externos y cree un nuevo servicio.
+   - Añada al servicio los siguientes permisos que requiere la aplicación:
+     - core_user_get_users
+     - core_course_get_courses_by_field
+     - core_enrol_get_users_courses
+     - core_enrol_get_enrolled_users
+   - Active la API REST para servicios web en la sección de gestion de protocolos.
+   - Genera un token para el servicio.
+
+6. Crea 2 bots de Telegram.
+   - Inicia una comversación con @BotFather.
+   - Crea 2 bots, uno para conversacion directa y otra para presencia en grupos.
+   - Obten los tokens de ambos.
+
+7. Configura variables de entorno copiando `datos.env.example` a `datos.env` y completando los valores.
+Los datos de SMTP se usaran para enviar codigos de verificación a los usuarios.
+
+8. Inicia los bots con:
 
    ```bash
    python3 main.py
-   python3 main_grupo.py
+   
+   # o en 2 terminales
+   python3 bot_principal.py
+   python3 bot_grupos.py
    ```
 
 ---

@@ -10,7 +10,7 @@ from email.message import EmailMessage
 import smtplib
 from pathlib import Path
 
-from config import SMTP_EMAIL, SMTP_PASSWORD, SMTP_SERVER
+from config import SMTP_USERNAME, SMTP_PASSWORD, SMTP_SERVER
 from db.constantes import USUARIO_TIPO, USUARIO_TIPO_ESTUDIANTE
 from handlers.commands import *
 from utils.state_manager import *
@@ -64,20 +64,20 @@ def register_handlers(bot):
         """Envía un correo electrónico con el token de verificación"""
         # Cargar credenciales sin valores predeterminados para datos sensibles
         smtp_server = SMTP_SERVER
-        sender_email = SMTP_EMAIL
+        sender = SMTP_USERNAME
         password = SMTP_PASSWORD
         
         # Verificar todas las credenciales necesarias
-        if not all([smtp_server, sender_email, password]):
+        if not all([smtp_server, sender, password]):
             missing = []
             if not smtp_server: missing.append("SMTP_SERVER")
-            if not sender_email: missing.append("SMTP_EMAIL")  
+            if not sender: missing.append("SMTP_USERNAME")  
             if not password: missing.append("SMTP_PASSWORD")
             logger.error(f"Faltan credenciales en datos.env.txt: {', '.join(missing)}")
             return False
         
         msg = EmailMessage()
-        msg["From"] = sender_email
+        msg["From"] = sender
         msg["To"] = email
         msg["Subject"] = "Token tutorChatBot"
         
@@ -111,7 +111,7 @@ def register_handlers(bot):
                 server.ehlo()
                 server.starttls()
                 # Add explicit type assertion since we've already validated these aren't None
-                server.login(str(sender_email), str(password))
+                server.login(str(sender), str(password))
                 server.send_message(msg)
             
             # También registramos el token en el log/consola para desarrollo

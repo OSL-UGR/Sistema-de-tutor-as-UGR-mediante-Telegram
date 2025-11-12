@@ -1,222 +1,108 @@
-import telebot
+"""
+main.py — Inicia ambos bots del proyecto (bot_principal y bot_grupos).
+
+Cómo funciona:
+- Por defecto intenta arrancar los módulos: "bot_principal" y "bot_grupos".
+- Puedes cambiar los módulos a arrancar con la variable de entorno BOT_MODULES, por ejemplo:
+  BOT_MODULES="bot_principal,bot_grupos"
+
+El script intenta detectar estas funciones/objetos en cada módulo (en este orden):
+- setup_polling()
+- main()
+- bot.infinity_polling() / bot.polling()
+
+Cada módulo se ejecuta en su propio hilo. Los errores se muestran por consola.
+"""
+
+import importlib
+import threading
 import time
-from telebot import types
+import os
 import sys
-from config import BOT_TOKEN
-from db import close_connection
-from db.queries import get_grupos_tutoria, get_matriculas_asignatura_de_usuario, get_usuarios, get_usuarios_local
-from db.constantes import *
-from handlers.commands import *
+import traceback
 
-# Inicializar el bot de Telegram
-bot = telebot.TeleBot(BOT_TOKEN) 
+# Módulos por defecto a arrancar (sin sufijo .py)
+BOT_MODULES = ["bot_principal","bot_grupos"]
 
-@bot.message_handler(commands=[COMMAND_HELP])
-def handle_help(message):
-    """Muestra la ayuda del bot"""
-    chat_id = message.chat.id
-    user = get_usuarios_local(USUARIO_ID_TELEGRAM=message.from_user.id)
-    
-    if not user:
-        bot.send_message(
-            chat_id,
-            f"❌ No estás registrado. Usa /{COMMAND_START} para registrarte."
-        )
-        return
-    user = user[0]
-    
-    help_text = (
-        "🤖 *Comandos disponibles:*\n\n"
-        f"/{COMMAND_START} - Inicia el bot, el registro y actualiza el menu de comandos\n"
-        f"/{COMMAND_HELP} - Muestra este mensaje de ayuda\n"
-        
-    )
-    if user[USUARIO_TIPO] == USUARIO_TIPO_ESTUDIANTE:
-        help_text += (
-            f"/{COMMAND_TUTORIA} - Ver profesores disponibles para tutoría\n"
-            f"/{COMMAND_VER_MIS_DATOS} - Ver tus datos registrados\n"
-            f"/{COMMAND_VALORAR_PROFESOR} - Dar una valoración a un profesor\n"
-            f"/{COMMAND_VER_REACCIONES} - Ver reacciones recibidas\n"
-        )
 
-    if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
-        help_text += (
-            f"/{COMMAND_CONFIGURAR_HORARIO} - Configura tu horario de tutorías\n"
-            f"/{COMMAND_CREAR_GRUPO_TUTORIA} - Crea un grupo de tutoría\n"
-            f"/{COMMAND_VER_VALORACIONES} - Muestra datos de tus valoraciones\n"
-            f"/{COMMAND_VER_REACCIONES} - Ver reacciones puestas\n"
-            f"/{COMMAND_VER_MENSAJES} - Ver historial de mensajes de asignaturas\n"
-        )
-    
-    # Escapar los guiones bajos para evitar problemas de formato
-    help_text = help_text.replace("_", "\\_")
-    
+def _run_target(module_name, target_callable):
     try:
-        bot.send_message(chat_id, help_text, parse_mode="Markdown")
+        print(f"▶️ Iniciando módulo: {module_name}")
+        target_callable()
     except Exception as e:
-        print(f"Error al enviar mensaje de ayuda: {e}")
-        # Si falla, envía sin formato
-        bot.send_message(chat_id, help_text.replace('*', ''), parse_mode=None)
+        print(f"❌ Error en módulo '{module_name}': {e}")
+        traceback.print_exc()
 
-@bot.message_handler(commands=[COMMAND_VER_MIS_DATOS])
-def handle_ver_misdatos(message):
-    chat_id = message.chat.id
-    print(f"\n\n### INICIO VER_MISDATOS - Usuario: {message.from_user.id} ###")
-    
-    user = get_usuarios(USUARIO_ID_TELEGRAM=message.from_user.id)
-    
-    if not user:
-        print("⚠️ Usuario no encontrado en BD")
-        bot.send_message(chat_id, f"❌ No estás registrado. Usa /{COMMAND_START} para registrarte.")
+
+def run_module(module_name):
+    try:
+        mod = importlib.import_module(module_name)
+    except Exception as e:
+        print(f"⚠️ No se pudo importar módulo '{module_name}': {e}")
+        traceback.print_exc()
         return
-    
-    user = user[0]
-    print(f"✅ Usuario encontrado: {user[USUARIO_NOMBRE]} ({user[USUARIO_TIPO]})")
-    
-    user_dict = dict(user)
-    
-    # Obtener matrículas del usuario
-    matriculas = get_matriculas_asignatura_de_usuario(MATRICULA_ID_USUARIO=user[USUARIO_ID])
-    
-    user_info = (
-        f"👤 Datos de usuario:\n\n"
-        f"Nombre: {user[USUARIO_NOMBRE]} {user[USUARIO_APELLIDOS]}\n"
-        f"Correo: {user[USUARIO_EMAIL] or 'No registrado'}\n"
-        f"Tipo: {user[USUARIO_TIPO].capitalize()}\n"
-    )
-        
-    # Añadir información de matrículas
-    if matriculas and len(matriculas) > 0:
-        user_info += "Asignaturas matriculadas:\n"
-        
-        # Agrupar asignaturas por carrera
-        for m in matriculas:
-            # Convertir cada matrícula a diccionario si es necesario
-            m_dict = dict(m) if hasattr(m, 'keys') else m
-            asignatura = m_dict.get(MATRICULA_ASIGNATURA_NOMBRE, 'Desconocida')
-            user_info += f"  - {asignatura}\n"
-    else:
-        user_info += "No tienes asignaturas matriculadas.\n"
-    
-    # Añadir horario si es profesor
-    if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR:
-        if USUARIO_HORARIO in user_dict and user_dict[USUARIO_HORARIO]:
-            user_info += f"\nHorario de tutorías:"
-            
-            dias = user_dict[USUARIO_HORARIO].split(', ')
-            
-            dia_anterior = ""
-            for dia in dias:
-                dia = dia.split(' ')
-                if dia[0] != dia_anterior:
-                    user_info += f"\n  -{dia[0]} {dia[1]}"
-                else:
-                    user_info += f", {dia[1]}"
-                dia_anterior = dia[0]
-            
-            user_info += "\n"
-        # NUEVA SECCIÓN: Mostrar grupos creadas por el profesor        
-        # Consultar todas las grupos creadas por este profesor  
-        grupos = get_grupos_tutoria(GRUPO_ID_PROFESOR=user[USUARIO_ID])
-        
-        if grupos and len(grupos) > 0:
-            for grupo in grupos:
-                if grupo[GRUPO_ID_ASIGNATURA] == None:
-                    grupo[GRUPO_ID_ASIGNATURA] = 0
-            grupos.sort(key=lambda x: x[GRUPO_ID_ASIGNATURA])
-            user_info += "\n🔵 Grupos de tutoría creados:\n"
-            
-            for grupo in grupos:
-                # Formato de fecha más amigable
-                fecha = str(grupo[GRUPO_FECHA]).split(' ')[0] if grupo[GRUPO_FECHA] else 'Desconocida'
-                enlace = grupo[GRUPO_ENLACE] if grupo[GRUPO_ENLACE] else 'Sin enlace'
-                
-                user_info += f"• {grupo[GRUPO_NOMBRE]}\n"
-                user_info += f"  📅 Creada: {fecha}\n"
-                user_info += f"  🔗 Enlace: {enlace}\n\n"
 
+    # Priorizar funciones conocidas para iniciar el bot
+    if hasattr(mod, "setup_polling") and callable(getattr(mod, "setup_polling")):
+        target = lambda: mod.setup_polling()
+    elif hasattr(mod, "main") and callable(getattr(mod, "main")):
+        target = lambda: mod.main()
+    elif hasattr(mod, "bot"):
+        bot_obj = getattr(mod, "bot")
+        # Telebot tiene polling() o infinity_polling(); preferir infinity_polling
+        if hasattr(bot_obj, "infinity_polling") and callable(getattr(bot_obj, "infinity_polling")):
+            target = lambda: bot_obj.infinity_polling()
+        elif hasattr(bot_obj, "polling") and callable(getattr(bot_obj, "polling")):
+            # Llamar a polling con parámetros razonables
+            def _polling_wrapper():
+                try:
+                    bot_obj.remove_webhook()
+                except Exception:
+                    pass
+                bot_obj.polling(none_stop=True)
+            target = _polling_wrapper
         else:
-            user_info += "\n*🔵 No has creado grupos de tutoría todavía.*\n"
-            user_info += "Usa /crear_ grupo _ tutoria para crear una nueva grupo.\n"
-    # Intentar enviar el mensaje con formato Markdown
+            print(f"⚠️ El módulo '{module_name}' expone 'bot' pero no tiene 'infinity_polling' ni 'polling'.")
+            return
+    else:
+        print(f"⚠️ El módulo '{module_name}' no expone 'setup_polling', 'main' ni 'bot'.")
+        return
+
+    # Ejecutar en hilo separado para cada módulo
+    t = threading.Thread(target=_run_target, args=(module_name, target), name=f"bot-{module_name}")
+    t.daemon = True
+    t.start()
+    return t
+
+
+def main():
+    if not BOT_MODULES:
+        print("❗ No hay módulos de bot configurados en BOT_MODULES.")
+        sys.exit(1)
+
+    print(f"📥 Módulos a iniciar: {BOT_MODULES}")
+
+    threads = []
+    for mod in BOT_MODULES:
+        t = run_module(mod)
+        if t:
+            threads.append(t)
+
     try:
-        bot.send_message(chat_id, user_info, parse_mode=None)
-        
-        # Si es profesor y tiene grupos, mostrar botones para editar
-        print("test")
-        if user[USUARIO_TIPO] == USUARIO_TIPO_PROFESOR and grupos and len(grupos) > 0:
-            markup = types.InlineKeyboardMarkup(row_width=1)
-            
-            # Añadir SOLO botones para editar cada grupo (quitar botones de eliminar)
-            for grupo in grupos:
-                grupo_id = grupo[GRUPO_ID]
-                
-                markup.add(types.InlineKeyboardButton(
-                    f"✏️ grupo: {grupo[GRUPO_NOMBRE]}",
-                    callback_data=f"{EDIT_GRUPO}{grupo_id}"
-                ))
-            bot.send_message(
-                chat_id,
-                "Selecciona una grupo para gestionar:",
-                reply_markup=markup
-            )
-    except Exception as e:
-        # Si falla por problemas de formato, enviar sin formato
-        print(f"Error al enviar datos de usuario: {e}")
-
-# Importar y configurar los handlers desde los módulos
-from handlers.registro import register_handlers as register_registro_handlers
-from handlers.tutorias import register_handlers as register_tutorias_handlers
-from handlers.grupos import EDIT_GRUPO, register_handlers as register_grupos_handlers
-from handlers.horarios import register_handlers as register_horarios_handlers
-from handlers.valoraciones import register_handlers as register_valoraciones_handlers
-from handlers.mensajes import register_handlers as register_mensajes_handlers
-
-# Registrar todos los handlers
-register_registro_handlers(bot)
-register_tutorias_handlers(bot)
-register_horarios_handlers(bot)
-register_valoraciones_handlers(bot)
-register_grupos_handlers(bot)
-register_mensajes_handlers(bot)
-
-def setup_polling():
-    """Configura el polling para el bot y maneja errores"""
-    print("🤖 Iniciando el bot...")
-    try:        
-        # Agregar esta línea:
-        print("⚙️ Configurando polling con eventos de grupo...")
-        
-        # Modificar esta línea:
-        bot.infinity_polling(
-            timeout=10, 
-            long_polling_timeout=5,
-            allowed_updates=["message", "callback_query", "my_chat_member", "chat_member"]
-        )
-
+        # Mantener el proceso vivo; los hilos son daemon, así que la aplicación
+        # terminará si el hilo principal recibe SIGINT/SIGTERM.
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
-        print("👋 Bot detenido manualmente")
+        print("👋 Detenido por usuario (KeyboardInterrupt)")
+        # Esperar brevemente a que los hilos terminen su limpieza
+        time.sleep(0.5)
         sys.exit(0)
     except Exception as e:
-        print(f"❌ Error fatal: {e}")
-        import traceback
+        print(f"❌ Error en main: {e}")
         traceback.print_exc()
-        
-        # Reintentar después de un tiempo
-        print("🔄 Reintentando en 10 segundos...")
-        time.sleep(10)
-        setup_polling()
+        sys.exit(1)
+
 
 if __name__ == "__main__":
-    print("="*50)
-    print("🎓 SISTEMA DE TUTORÍAS UGR")
-    print("="*50)
-    print(f"📅 Fecha de inicio: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print("="*50)
-    
-    # Iniciar el bot
-    try:
-        setup_polling()
-    finally:
-        close_connection()
-        print("🔒 Conexión a la base de datos cerrada")
+    main()
