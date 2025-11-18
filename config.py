@@ -17,7 +17,7 @@ DB_HOST = os.getenv("DB_HOST", "TU_DB_HOST")
 DB_NAME = os.getenv("DB_NAME", "TU_DB_NAME")
 
 MOODLE_TOKEN = os.getenv("MOODLE_TOKEN", "MOODLE_TOKEN")
-MOODLE_ADDRESS = os.getenv("MOODLE_ADDRESS", "MOODLE_ADDRESS")
+MOODLE_URL = os.getenv("MOODLE_URL", "MOODLE_URL")
 
 # Configuración del bot
 BOT_TOKEN = os.getenv("BOT_TOKEN", "TU_TOKEN_AQUI")
@@ -26,5 +26,5 @@ BOT_GRUPO_NOMBRE = os.getenv("BOT_GRUPO_NOMBRE", "nombre_bot")
 
 # Configuración de email
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
