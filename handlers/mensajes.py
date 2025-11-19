@@ -130,7 +130,7 @@ def register_handlers(bot):
             matriculas = get_matriculas_asignatura_de_usuario(MATRICULA_ID_USUARIO=profesor[USUARIO_ID])
             markup = types.InlineKeyboardMarkup()
 
-            callback_data = f"{MENSAJES}1"
+            callback_data = f"{MENSAJES}0"
             markup.add(types.InlineKeyboardButton(text="Tutorias", callback_data=callback_data))
 
             if matriculas:
@@ -169,7 +169,7 @@ def register_handlers(bot):
         mensajes = get_mensajes(MENSAJE_ID_ASIGNATURA=id_asignatura, MENSAJE_ID_PROFESOR=profesor[USUARIO_ID])
         matriculas = []
         asignatura = ""
-        if id_asignatura != "1":
+        if id_asignatura != "0":
             matriculas = get_matriculas_asignatura_de_usuario(MATRICULA_ID_ASIGNATURA=id_asignatura, MATRICULA_TIPO=MATRICULA_TODAS)
             asignatura = get_asignaturas(ASIGNATURA_ID=id_asignatura)[0][ASIGNATURA_NOMBRE_CORTO]
         else:

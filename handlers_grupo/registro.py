@@ -267,7 +267,7 @@ def register_handlers(bot):
                 id_usuario_profesor,
                 nuevo_nombre,
                 tipo_grupo,
-                None,  # 0 indica que no está vinculado a una asignatura específica
+                0,  # 0 indica que no está vinculado a una asignatura específica
                 chat_id,
                 enlace_invitacion
             )
